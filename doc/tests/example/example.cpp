@@ -1,21 +1,28 @@
 #include <test/tests.h>
-
 #include <csv-writer.h>
 
-TEST("Example test", example) {
-	double r = test.random(-1, 1);
+#include "../../sigplot.h"
 
-	// Some assertions
-	TEST_ASSERT(r >= -1);
-	TEST_ASSERT(r < 1);
-	// Prints indented
-	test.log("OK");
+#include <cmath>
+
+using Plot = signalsmith::plot::Plot;
+
+TEST("Example plot", example) {
+	Plot plot;
 	
-	// CSV data
-	CsvWriter csv("example");
-	csv.line("x", "x^2");
-	for (double x = 0; x < 1; x += 0.01) {
-		csv.line(x, x*x);
-		// can also use csv.write(...) to avoid newlines
+	auto &axes = plot.axes();
+	axes.x.major(0).tick(10);
+	axes.y.major(0).minor(-1, 1);
+	
+	auto &sin = axes.line(), &cos = axes.line();
+	for (double x = 0; x < 10; x += 0.01) {
+		sin.add(x, std::sin(x));
+		cos.add(x, std::cos(x));
 	}
+	sin.label("sin(x)");
+	cos.label("cos(x)");
+	
+	plot.write("example.svg");
+	
+	return test.pass();
 }

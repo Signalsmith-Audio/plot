@@ -1,8 +1,11 @@
 import article
+import numpy;
 
-figure, axes = article.small()
+figure, axes = article.medium()
 
-columns, data = article.readCsv("example.csv")
-axes.plot(data[0], data[1]);
+x = numpy.linspace(0, 10, 1000);
+axes.plot(x, numpy.sin(x), label="sin(x)");
+axes.plot(x, numpy.cos(x), label="cos(x)");
+axes.spines['bottom'].set(position=('data', 0))
 
-figure.save("example.svg")
+figure.save("example-python.svg");

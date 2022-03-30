@@ -45,6 +45,10 @@ public:
 				stroke-width: 1.25px;
 				stroke-linejoin: round;
 			}
+			.svg-plot-fill {
+				stroke: none;
+				opacity: 0.15;
+			}
 			.svg-plot-major {
 				stroke: #000;
 				stroke-width: 1px;
@@ -413,6 +417,8 @@ public:
 };
 
 class Line2D;
+class Fill2D;
+
 class Axes2D : public SvgDrawable {
 	int styleIndex = 0;
 public:
@@ -501,6 +507,11 @@ public:
 	Line2D & line(int style);
 	Line2D & line() {
 		return line(styleIndex++);
+	}
+
+	Fill2D & fill(int style);
+	Fill2D & fill() {
+		return fill(styleIndex++);
 	}
 };
 
@@ -627,6 +638,40 @@ Line2D & Axes2D::line(int style) {
 	Line2D *line = new Line2D(*this, style);
 	this->addChild(line);
 	return *line;
+}
+
+class Fill2D : public SvgDrawable {
+	Axes2D &axes;
+	struct Point {
+		double x, y;
+	};
+	std::vector<Point> points;
+	int styleIndex = 0;
+public:
+	Fill2D(Axes2D &axes, int styleIndex) : axes(axes), styleIndex(styleIndex) {}
+	
+	Fill2D & add(double x, double y) {
+		points.push_back({x, y});
+		axes.x.autoValue(x);
+		axes.y.autoValue(y);
+		return *this;
+	}
+	
+	void writeData(std::ostream &o, const PlotStyle &style) override {
+		int fillIndex = styleIndex%style.colourCount;
+		o << "<path class=\"svg-plot-fill svg-plot-f" << fillIndex << "\" d=\"M";
+		for (auto &p : points) {
+			o << " " << axes.x.map(p.x) << " " << axes.y.map(p.y);
+		}
+		o << "\" />";
+
+		SvgDrawable::writeData(o, style);
+	}
+};
+Fill2D & Axes2D::fill(int style) {
+	Fill2D *fill = new Fill2D(*this, style);
+	this->addChild(fill);
+	return *fill;
 }
 
 class Plot : public SvgDrawable {

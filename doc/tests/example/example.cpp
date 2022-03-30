@@ -9,7 +9,13 @@ using Plot = signalsmith::plot::Plot;
 
 TEST("Example plot", example) {
 	Plot plot;
-	
+	plot.style.prefix = "@import \"/style/article/dist.css\";";
+	plot.style.suffix = R"CSS(
+		.svg-plot-label, .svg-plot-value{
+			font-family: inherit;
+		}
+	)CSS";
+
 	auto &axes = plot.axes();
 	axes.x.major(0).tick(10);
 	axes.y.major(0).minor(-1, 1);

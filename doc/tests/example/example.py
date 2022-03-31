@@ -8,4 +8,4 @@ axes.plot(x, numpy.sin(x), label="sin(x)");
 axes.plot(x, numpy.cos(x), label="cos(x)");
 axes.spines['bottom'].set(position=('data', 0))
 
-figure.save("example-python.svg");
+figure.save("python.svg");

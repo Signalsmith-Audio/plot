@@ -58,3 +58,6 @@ out/test-%: $(shell find .. -iname "*.h") $(shell find tests/$* -iname "*.cpp")
 		-I tests/ $${TEST_CPP_FILES} \
 		-I "../" \
 		-o out/test-$*
+
+doxygen:
+	doxygen Doxyfile-local

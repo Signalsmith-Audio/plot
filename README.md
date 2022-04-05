@@ -1,6 +1,49 @@
-# C++ utility template
+# Basic C++ plots
 
-This is a starting-point for developing a C++ library.  It includes a `doc/` directory which runs tests.
+This is minimal C++ plotting library.  It is header-only and dependency-free, but only outputs SVGs.
+
+It is created and maintained mostly for internal Signalsmith use, so I'm adding features as I need them.
+
+![example plot](doc/images/example.svg)
+
+## Features / design choices
+
+* SVG output only
+* auto-styled lines and fills
+	* simultaneous dash/colour sequences for accessibility
+	* styling mostly done via CSS
+	* customisable CSS, colour-/dash-sequences and various sizes 
+* explicit labelling (no legends)
+* ticks are at edges, but axes are just major gridlines
+
+### Current limitations
+
+* Only 2D axes supported
+* One axis per plot
+* No automatic label placement or de-collision
+* Linear axis ranges only
+
+## How to use
+
+To set up a plot (after including `sigplot.h`):
+
+```cpp
+signalsmith::plot::Plot plot;
+auto &axes = plot.axes();
+```
+
+To configure X/Y axes with major/minor grid lines and ticks:
+```cpp
+// Add major/minor lines, and a tick (with no grid-line)
+axes.x.major(0, 10).tick(5).minor(3.5);
+```
+
+To set the range:
+```cpp
+axes.x.linear(0, 15);
+// or a custom scale
+axes.y.range(std::log, 1, 1000);
+```
 
 ## Tests
 

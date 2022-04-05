@@ -1,0 +1,10 @@
+PROJECT_NAME = "Signalsmith's Basic C++ Plots"
+PROJECT_NUMBER = 1.0.0
+PROJECT_BRIEF = A minimal C++ plotting library
+
+OUTPUT_DIRECTORY = .
+
+INPUT = ../
+EXCLUDE = ./
+
+IMAGE_PATH = out/analysis

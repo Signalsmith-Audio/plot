@@ -76,6 +76,28 @@ public:
 	unsigned int sampleRate = 48000;
 	unsigned int channels = 1;
 	std::vector<double> samples;
+	int length() const {
+		return samples.size()/channels;
+	}
+	template<bool isConst>
+	class ChannelReader {
+		using CSample = typename std::conditional<isConst, const double, double>::type;
+		CSample *data;
+		int stride;
+	public:
+		ChannelReader(CSample *samples, int channels) : data(samples), channels(channels) {}
+		
+		CSample & operator [](int i) {
+			return data + i*stride;
+		}
+	};
+	ChannelReader<false> operator [](int c) {
+		return ChannelReader<false>(samples.data() + c, channels);
+	}
+	ChannelReader<true> operator [](int c) const {
+		return ChannelReader<false>(samples.data() + c, channels);
+	}
+	
 	Result result = Result(Result::Code::OK);
 
 	Wav() {}
@@ -88,7 +110,7 @@ public:
 	enum class Format {
 		PCM=1
 	};
-	bool formatIsValid(uint16_t format, uint16_t bits) {
+	bool formatIsValid(uint16_t format, uint16_t bits) const {
 		if (format == (uint16_t)Format::PCM) {
 			if (bits == 16) {
 				return true;
@@ -107,10 +129,13 @@ public:
 		read32(file); // File length - we don't check this
 		if (read32(file) != value_WAVE) return result = Result(Result::Code::FORMAT_ERROR, "Input is not a plain WAVE file");
 		
-		Format format = Format::PCM; // Shouldn't matter, we should always get a "fmt " chunk before data
+		auto blockStart = file.tellg(); // start of the blocks - we will seek back to here periodically
+		bool hasFormat = false, hasData = false;
+		
+		Format format = Format::PCM; // Shouldn't matter, we should always read the `fmt ` chunk before `data`
 		while (!file.eof()) {
 			auto blockType = read32(file), blockLength = read32(file);
-			if (blockType == value_fmt) {
+			if (!hasFormat && blockType == value_fmt) {
 				auto formatInt = read16(file);
 				format = (Format)formatInt;
 				channels = read16(file);
@@ -126,7 +151,11 @@ public:
 				// Since it's plain WAVE, we can do some extra checks for consistency
 				if (bitsPerSample*channels != bytesPerFrame*8) return result = Result(Result::Code::FORMAT_ERROR, "Format sizes don't add up");
 				if (expectedBytesPerSecond != sampleRate*bytesPerFrame) return result = Result(Result::Code::FORMAT_ERROR, "Format sizes don't add up");
-			} else if (blockType == value_data) {
+
+				hasFormat = true;
+				file.clear();
+				file.seekg(blockStart);
+			} else if (hasFormat && blockType == value_data) {
 				std::vector<double> samples(0);
 				switch (format) {
 				case Format::PCM:
@@ -145,10 +174,14 @@ public:
 					samples.push_back(0);
 				}
 				this->samples = samples;
+				hasData = true;
 			} else {
+				// We either don't recognise
 				file.ignore(blockLength);
 			}
 		}
+		if (!hasFormat) return result = Result(Result::Code::FORMAT_ERROR, "missing `fmt ` block");
+		if (!hasData) return result = Result(Result::Code::FORMAT_ERROR, "missing `data` block");
 		return result = Result(Result::Code::OK);
 	}
 	

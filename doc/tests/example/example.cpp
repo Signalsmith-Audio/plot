@@ -11,17 +11,14 @@ TEST("Example plot", example) {
 	Plot plot;
 
 	auto &axes = plot.axes();
-	axes.x.major(0).tick(10);
-	axes.y.major(0).minor(-1, 1);
+	axes.x.major(0).tick(10).label("time");
+	axes.y.major(0).minor(-1, 1).label("signal");
 	
-	auto &sin = axes.line(), &cos = axes.line();
-	auto &fill = axes.fill(0);
+	auto &sin = axes.line().fillToY(0), &cos = axes.line();
 	for (double x = 0; x < 10; x += 0.01) {
 		sin.add(x, std::sin(x));
 		cos.add(x, std::cos(x));
-		fill.add(x, std::sin(x));
 	}
-	fill.add(10, 0);
 	sin.label("sin(x)");
 	cos.label("cos(x)");
 
@@ -49,12 +46,32 @@ TEST("Custom styles", custom_styles) {
 		.svg-plot-fill.svg-plot-f4 {
 			fill: #EDB410;
 		}
+		
+		* {
+			animation: intro 0.2s;
+		}
+		@keyframes intro {
+			0% {
+				stroke-width: 0px;
+				filter: opacity(0);
+			}
+			to {
+				filter: opacity(1);
+			}
+		}
+		.svg-plot-fill, .svg-plot-line {
+			animation-duration: 0.4s;
+		}
+		.svg-plot-label {
+			animation-duration: 0.7s;
+		}
+
 	)CSS";
 	plot.style.colours = {"#007AB0", "#BB102B", "#44A730", "#87694F", "#EDA720", "#A64D99"};
 
 	auto &axes = plot.axes();
-	axes.x.major(0).tick(10);
-	axes.y.major(0).minor(-1, plot.tick(-0.5, ""), plot.tick(0.5, ""), 1);
+	axes.x.major(0).tick(10).label("time");
+	axes.y.major(0).minor(-1, plot.tick(-0.5, ""), plot.tick(0.5, ""), 1).label("signal");
 	
 	auto &sin = axes.line(), &cos = axes.line();
 	auto &fill = axes.fill(0);
@@ -102,8 +119,8 @@ TEST("Custom styles (2)", custom_styles2) {
 	)CSS";
 
 	auto &axes = plot.axes();
-	axes.x.major(0).tick(10);
-	axes.y.major(0).minor(-1, plot.tick(-0.5, ""), plot.tick(0.5, ""), 1);
+	axes.x.major(0).tick(10).label("time");
+	axes.y.major(0).minor(-1, plot.tick(-0.5, ""), plot.tick(0.5, ""), 1).label("signal");
 	
 	auto &sin = axes.line(), &cos = axes.line();
 	auto &fill = axes.fill(0);
@@ -123,6 +140,7 @@ TEST("Custom styles (2)", custom_styles2) {
 
 TEST("Colour/dash patterns", colour_dash_patterns) {
 	Plot plot;
+
 	auto &axes = plot.axes();
 	axes.x.major(0).tick(10);
 	axes.y.major(0).minor(-1, 1);

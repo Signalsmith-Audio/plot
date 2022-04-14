@@ -328,7 +328,7 @@ public:
 			if ((*c == ':' || *c == ',') && *(c + 1) == ' ') ++c;
 			++c;
 		}
-		o << "</style><script>var q={};location.href.replace(/^[^#]*#?/,'').split('\\x26').forEach(function(p,D){D=decodeURIComponent;if(p){p=p.split('=');q[D(p.shift())]=D(p.join('='))}});var d=document,r=d.rootElement,s=d.getElementsByTagName('style')[0];if(q.style){s.textContent='@import \"'+q.style+'\";'+s.textContent}if(q.css){s.textContent+=q.css}</script></svg>";
+		o << "</style></svg>";
 	}
 	void write(std::string svgFile, const PlotStyle &style) {
 		std::ofstream s(svgFile);

@@ -9,40 +9,79 @@
 #include <cmath>
 #include <sstream>
 
+//#include <iostream>
+//#define LOG_EXPR(x) std::cout << #x << " = " << (x) << "\n";
+
 namespace signalsmith { namespace plot {
+
+	/**	@defgroup Plots Plots
+		@brief Basic C++ plotting
+		
+		To use, set up a `Figure` or `Plot2D`, add elements to it, and then write with `.write("output.svg")`.
+		\image html default-2d.svg An example plot
+		
+		Elements are drawn hierarchically, but generally in reverse order, so you should add your most important elements first.
+
+		@{
+		@file
+	**/
 
 /// Estimates string width encoded with UTF-8
 static double estimateUtf8Width(const char *utf8Str);
 
+/** Plotting style, used for both layout and SVG rendering.
+	The baseline CSS style is produced based on `.colours` and `.dashes`. You can add your own `prefix`/`suffix`, as well as changing sizes and colour/dash sequences.
+ 		\image html custom-2d.svg
+	The colour/dash/hatch sequences are different lengths, to increase the number of combinations - although if you're relying on this, you might be plotting too many things.
+ 		\image html style-sequence.svg
+*/
 class PlotStyle {
 public:
-	std::vector<std::string> colours = {"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
+	std::vector<std::string> colours = {"#000", "#000"};//{"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
 	std::vector<std::vector<double>> dashes = {{}, {1.2, 1.2}, {2.8, 1.6}, {5, 4}, {4, 1, 1, 1, 1, 1}, {10, 3}, {4, 2, 1, 2}};
+	struct Hatch {
+		std::vector<double> angles;
+		double lineScale = 1, spaceScale=1;
+		Hatch() {}
+		Hatch(double angle) : angles({angle}) {}
+		Hatch(std::vector<double> angles, double scale=1) : angles(angles), lineScale(scale), spaceScale(scale) {}
+		Hatch(std::vector<double> angles, double lineScale, double spaceScale) : angles(angles), lineScale(lineScale), spaceScale(spaceScale) {}
+	};
+	std::vector<Hatch> hatches = {{}, {-50}, {{30}, 0.9, 0.8}, {{8, 93}, 0.7, 1}};
 	std::string strokeClass(int styleIndex) const {
-		if (styleIndex < 0) return "";
+		if (styleIndex < 0 || colours.size() == 0) return "";
 		return "svg-plot-s" + std::to_string(styleIndex%(int)colours.size());
 	}
 	std::string fillClass(int styleIndex) const {
-		if (styleIndex < 0) return "";
+		if (styleIndex < 0 || colours.size() == 0) return "";
 		return "svg-plot-f" + std::to_string(styleIndex%(int)colours.size());
 	}
 	std::string dashClass(int styleIndex) const {
-		if (styleIndex < 0) return "";
+		if (styleIndex < 0 || dashes.size() == 0) return "";
 		return "svg-plot-d" + std::to_string(styleIndex%(int)dashes.size());
+	}
+	std::string hatchClass(int styleIndex) const {
+		if (styleIndex < 0 || hatches.size() == 0) return "";
+		return "svg-plot-h" + std::to_string(styleIndex%(int)hatches.size());
 	}
 	double padding = 10;
 	double labelSize = 12;
 	double valueSize = 10;
 	double lineWidth = 1.5;
-	double textAspect = 1; // If you use a different font, you might want to allocate more space for it
+	double fillOpacity = 0.25;
+	double hatchWidth = 1;
+	double hatchSpacing = 3;
+	// Use this scale the text-size estimates if you use a particularly wide font
+	double textAspect = 1;
 	double tickH = 4, tickV = 5;
 	double textPadding = 5;
 
+	/// Extra CSS to add to the output
 	std::string prefix = "", suffix = "";
-	void css(std::ostream &o) {
+	void css(std::ostream &o) const {
 		o << prefix;
 		o << R"CSS(
-			* {
+			.svg-plot {
 				stroke-linecap: butt;
 			}
 			.svg-plot-bg {
@@ -61,7 +100,7 @@ public:
 			}
 			.svg-plot-fill {
 				stroke: none;
-				opacity: 0.15;
+				opacity: )CSS" << fillOpacity << R"CSS(;
 			}
 			.svg-plot-major {
 				stroke: #000;
@@ -99,12 +138,15 @@ public:
 			.svg-plot-value {
 				font-size: )CSS" << valueSize << R"CSS(px;
 			}
-
+			.svg-plot-hatch {
+				stroke: #FFF;
+				stroke-width: )CSS" << hatchWidth << R"CSS(px;
+			}
 		)CSS";
 		
 		for (size_t i = 0; i < colours.size(); ++i) {
 			o << ".svg-plot-s" << i << "{stroke:" << colours[i] << "}\n";
-			o << ".svg-plot-f" << i << "{fill:" << colours[i] << "}\n";
+			o << ".svg-plot-f" << i << ",.svg-plot-t" << i << "{fill:" << colours[i] << "}\n";
 		}
 		for (size_t i = 0; i < dashes.size(); ++i) {
 			auto &d = dashes[i];
@@ -116,10 +158,30 @@ public:
 				o << "}\n";
 			}
 		}
+		for (size_t i = 0; i < hatches.size(); ++i) {
+			auto &h = hatches[i];
+			if (h.angles.size()) {
+				o << ".svg-plot-h" << i << "{mask:url(#svg-plot-hatch" << i << ")}\n";
+			} else {
+				// Compensate for the fact that it's not hatched
+				o << ".svg-plot-h" << i << "{opacity:" << (fillOpacity*std::sqrt(hatchWidth/hatchSpacing)) << "}\n";
+			}
+		}
+		for (size_t i = 0; i < hatches.size(); ++i) {
+			auto &h = hatches[i];
+			if (h.lineScale != 1) {
+				o << "#svg-plot-hatch" << i << "-pattern{stroke-width:" << hatchWidth*h.lineScale << "px}\n";
+			}
+		}
 		o << suffix;
 	}
 };
 
+/** Any drawable element.
+	Not copyable/assignable because that's usually a mistake.
+	
+	There are two layers: data and labels.  The last-registered elements are drawn first.
+*/
 class SvgDrawable {
 	std::vector<std::unique_ptr<SvgDrawable>> children;
 	bool hasLayout = false;
@@ -168,7 +230,6 @@ public:
 		children.emplace_back(child);
 	}
 
-	/// Not copyable/assignable because that's usually a mistake
 	SvgDrawable(const SvgDrawable &other) = delete;
 	SvgDrawable & operator =(const SvgDrawable &other) = delete;
 
@@ -206,7 +267,98 @@ public:
 	}
 };
 
-class Axis1D {
+/// Top-level objects which can generate SVG files
+class SvgFileDrawable : public SvgDrawable {
+public:
+	virtual PlotStyle defaultStyle() {
+		return {};
+	}
+
+	void write(std::ostream &o, const PlotStyle &style) {
+		this->layoutIfNeeded(style);
+
+		// Add padding
+		auto bounds = this->bounds;
+		bounds.left -= style.padding;
+		bounds.right += style.padding;
+		bounds.top -= style.padding;
+		bounds.bottom += style.padding;
+
+		o << "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n";
+		o << "<svg class=\"svg-plot\" width=\"" << bounds.width() << "pt\" height=\"" << bounds.height() << "pt\" version=\"1.1\" viewBox=\"" << bounds.left << " " << bounds.top << " " << bounds.width() << " " << bounds.height() << "\" preserveAspectRatio=\"xMidYMid\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">";
+
+		o << "<rect class=\"svg-plot-bg\" x=\"" << this->bounds.left << "\" y=\"" << this->bounds.top << "\" width=\"" << this->bounds.width() << "\" height=\"" << this->bounds.height() << "\"/>";
+		this->writeData(o, style);
+		this->writeLabel(o, style);
+
+		int maxBounds = std::ceil(std::max(
+			std::max(std::abs(this->bounds.left), std::abs(this->bounds.right)),
+			std::max(std::abs(this->bounds.top), std::abs(this->bounds.bottom))
+		)*std::sqrt(2));
+		o << "<defs>";
+		for (size_t i = 0; i < style.hatches.size(); ++i) {
+			auto &hatch = style.hatches[i];
+			if (!hatch.angles.size()) continue;
+			o << "<mask id=\"svg-plot-hatch" << i << "\">";
+			for (double angle : hatch.angles) {
+				o << "<rect x=\"" << -maxBounds << "\" y=\"" << -maxBounds << "\" width=\"" << (2*maxBounds) << "\" height=\"" << (2*maxBounds) << "\" fill=\"url(#svg-plot-hatch" << i << "-pattern)\" style=\"transform:rotate(" << angle << "deg)\"/>";
+			}
+			o << "</mask>";
+			double spacing = style.hatchSpacing*hatch.spaceScale;
+			o << "<pattern id=\"svg-plot-hatch" << i << "-pattern\" class=\"svg-plot-hatch\" x=\"0\" y=\"0\" width=\"10\" height=\"" << spacing << R"SVG(" patternUnits="userSpaceOnUse" stroke="#FFF" fill="none">
+				<line x1="-1" y1=")SVG" << (spacing*0.5) << R"SVG(" x2="11" y2=")SVG" << (spacing*0.5) << R"SVG(" />
+			</pattern>)SVG";
+		}
+		o << "</defs>";
+
+		o << "<style>";
+		std::stringstream cssStream;
+		style.css(cssStream);
+		std::string css = cssStream.str();
+		const char *c = css.c_str();
+		// Strip tabs and newlines;
+		while (*c) {
+			if (*c != '\t' && *c != '\n') {
+				// skip space before {
+				if (*c != ' ' || *(c + 1) != '{') {
+					o << (*c);
+				}
+			}
+			// skip space after :
+			if ((*c == ':' || *c == ',') && *(c + 1) == ' ') ++c;
+			++c;
+		}
+		o << "</style><script>var q={};location.href.replace(/^[^#]*#?/,'').split('\\x26').forEach(function(p,D){D=decodeURIComponent;if(p){p=p.split('=');q[D(p.shift())]=D(p.join('='))}});var d=document,r=d.rootElement,s=d.getElementsByTagName('style')[0];if(q.style){s.textContent='@import \"'+q.style+'\";'+s.textContent}if(q.css){s.textContent+=q.css}</script></svg>";
+	}
+	void write(std::string svgFile, const PlotStyle &style) {
+		std::ofstream s(svgFile);
+		write(s, style);
+	}
+	// We don't have a stored style, so use the default one
+	void write(std::ostream &o) {
+		this->write(o, this->defaultStyle());
+	}
+	void write(std::string svgFile) {
+		write(svgFile, this->defaultStyle());
+	}
+};
+
+/// A labelled point on an axis.
+struct Tick {
+	double value;
+	std::string name;
+
+	enum class Strength {major, minor, tick};
+	Strength strength = Strength::tick;
+	
+	Tick(double value, std::string name) : value(value), name(name) {}
+
+	template<typename T>
+	Tick(T value) : value(double(value)), name(std::to_string(value)) {}
+};
+
+/// A map from values to screen-space
+class Axis {
 	std::function<double(double)> unitMap;
 	double autoMin, autoMax;
 	bool hasAutoValue = false;
@@ -241,13 +393,13 @@ public:
 		}
 	}
 
-	Axis1D(double drawLow, double drawHigh) : drawLow(drawLow), drawHigh(drawHigh) {
+	Axis(double drawLow, double drawHigh) : drawLow(drawLow), drawHigh(drawHigh) {
 		linear(0, 1);
 		autoScale = true;
 		autoLabel = true;
 	}
 	
-	Axis1D & label(std::string l) {
+	Axis & label(std::string l) {
 		_label = l;
 		return *this;
 	}
@@ -255,13 +407,13 @@ public:
 		return _label;
 	}
 
-	Axis1D & range(std::function<double(double)> valueToUnit) {
+	Axis & range(std::function<double(double)> valueToUnit) {
 		autoScale = false;
 		unitMap = valueToUnit;
 		return *this;
 	}
 
-	Axis1D & range(std::function<double(double)> map, double lowValue, double highValue) {
+	Axis & range(std::function<double(double)> map, double lowValue, double highValue) {
 		double lowMapped = map(lowValue), highMapped = map(highValue);
 		return range([=](double v) {
 			double mapped = map(v);
@@ -269,7 +421,7 @@ public:
 		});
 	}
 
-	Axis1D & linear(double low, double high) {
+	Axis & linear(double low, double high) {
 		return range([=](double v) {
 			return (v - low)/(high - low);
 		});
@@ -280,31 +432,21 @@ public:
 		return drawLow + unit*(drawHigh - drawLow);
 	}
 
-	struct Tick {
-		double value;
-		std::string name;
-		int strength = 0;
-		
-		Tick(double value, std::string name) : value(value), name(name) {}
-
-		template<typename T>
-		Tick(T value) : value(double(value)), name(std::to_string(value)) {}
-	};
 	std::vector<Tick> ticks;
 	
-	Axis1D &major() {
+	Axis &major() {
 		autoLabel = false;
 		return *this;
 	}
 	template<class ...Args>
-	Axis1D &major(Tick tick, Args ...args) {
+	Axis &major(Tick tick, Args ...args) {
 		autoValue(tick.value);
-		tick.strength = 2;
+		tick.strength = Tick::Strength::major;
 		ticks.push_back(tick);
 		return major(args...);
 	}
 	template<typename T>
-	Axis1D & majorRange(T start, T end, T step, bool useLabels=true) {
+	Axis & majorRange(T start, T end, T step, bool useLabels=true) {
 		step = std::abs(step);
 		if (start <= end) {
 			for (T t = start; t <= end; t += step) {
@@ -317,19 +459,19 @@ public:
 		}
 		return *this;
 	}
-	Axis1D &minor() {
+	Axis &minor() {
 		autoLabel = false;
 		return *this;
 	}
 	template<class ...Args>
-	Axis1D &minor(Tick tick, Args ...args) {
+	Axis &minor(Tick tick, Args ...args) {
 		autoValue(tick.value);
-		tick.strength = 1;
+		tick.strength = Tick::Strength::minor;
 		ticks.push_back(tick);
 		return minor(args...);
 	}
 	template<typename T>
-	Axis1D & minorRange(T start, T end, T step, bool useLabels=true) {
+	Axis & minorRange(T start, T end, T step, bool useLabels=true) {
 		step = std::abs(step);
 		if (start <= end) {
 			for (T t = start; t <= end; t += step) {
@@ -342,19 +484,19 @@ public:
 		}
 		return *this;
 	}
-	Axis1D &tick() {
+	Axis &tick() {
 		autoLabel = false;
 		return *this;
 	}
 	template<class ...Args>
-	Axis1D &tick(Tick t, Args ...args) {
+	Axis &tick(Tick t, Args ...args) {
 		autoValue(t.value);
-		t.strength = 0;
+		t.strength = Tick::Strength::tick;
 		ticks.push_back(t);
 		return tick(args...);
 	}
 	template<typename T>
-	Axis1D & tickRange(T start, T end, T step, bool useLabels=true) {
+	Axis & tickRange(T start, T end, T step, bool useLabels=true) {
 		step = std::abs(step);
 		if (start <= end) {
 			for (T t = start; t <= end; t += step) {
@@ -369,11 +511,10 @@ public:
 	}
 };
 
-struct Point {
+struct Point2D {
 	double x, y;
 };
 
-template<bool isValue=false>
 class TextLabel : public SvgDrawable {
 	double textWidth = 0;
 	void write(std::ostream &o) {
@@ -401,13 +542,11 @@ class TextLabel : public SvgDrawable {
 		o << "</text>";
 	}
 protected:
-	Point drawAt;
+	Point2D drawAt;
 	double alignment = 0; // 0=centre, 1=left, -1=right
 	std::string text, cssClass;
-	bool vertical;
-public:
-	TextLabel(Point at, double alignment, std::string text, std::string cssClass="svg-plot-label", bool vertical=false) : drawAt(at), alignment(alignment), text(text), cssClass(cssClass), vertical(vertical) {}
-	
+	bool vertical, isValue;
+
 	void layout(const PlotStyle &style) override {
 		double x = drawAt.x, y = drawAt.y;
 		double fontSize = isValue ? style.valueSize : style.labelSize;
@@ -422,23 +561,29 @@ public:
 		}
 	}
 
+public:
+	TextLabel(Point2D at, double alignment, std::string text, std::string cssClass="svg-plot-label", bool vertical=false, bool isValue=false) : drawAt(at), alignment(alignment), text(text), cssClass(cssClass), vertical(vertical), isValue(isValue) {}
+	
 	void writeLabel(std::ostream &o, const PlotStyle &) override {
 		write(o);
 	}
 };
 
+/** A line on a 2D plot.
+	\image html filled-lines.svg
+*/
 class Line2D : public SvgDrawable {
 protected:
 	bool _drawLine = true;
 	bool _drawFill = false;
 	bool hasFillToX = false, hasFillToY = false;
-	Point fillTo;
+	Point2D fillTo;
 	
-	Axis1D &axisX, &axisY;
-	std::vector<Point> points;
+	Axis &axisX, &axisY;
+	std::vector<Point2D> points;
 	int styleIndex = 0;
 public:
-	Line2D(Axis1D &axisX, Axis1D &axisY, int styleIndex) : axisX(axisX), axisY(axisY), styleIndex(styleIndex) {}
+	Line2D(Axis &axisX, Axis &axisY, int styleIndex) : axisX(axisX), axisY(axisY), styleIndex(styleIndex) {}
 	
 	Line2D & add(double x, double y) {
 		points.push_back({x, y});
@@ -447,6 +592,8 @@ public:
 		return *this;
 	}
 	
+	///@name Styling
+	/// @{
 	Line2D & drawLine(bool draw) {
 		_drawLine = draw;
 		return *this;
@@ -469,81 +616,92 @@ public:
 		fillTo = {0, y};
 		return *this;
 	}
+	/// @}
 	
-	class LineLabel : public TextLabel<false> {
-		Axis1D &axisX, &axisY;
-		Point at;
+	class LineLabel : public TextLabel {
+		Axis &axisX, &axisY;
+		Point2D at;
 		std::string name;
 		// direction: 0=right, 1=up, 2=left, 3=down
 		double direction, distance;
-		Point drawLineFrom{0, 0}, drawLineTo{0, 0};
+		Point2D drawLineFrom{0, 0}, drawLineTo{0, 0};
 		int styleIndex;
-	public:
-		LineLabel(Axis1D &axisX, Axis1D &axisY, Point at, std::string name, double direction, double distance, int styleIndex) : TextLabel({0, 0}, 0, name), axisX(axisX), axisY(axisY), at(at), name(name), direction(direction), distance(distance), styleIndex(styleIndex) {}
-		
+	protected:
 		void layout(const PlotStyle &style) override {
-			double angle = direction*-0.5*3.14159265358979;
-			double ax = std::cos(angle), ay = std::sin(angle);
-
 			double sx = axisX.map(at.x), sy = axisY.map(at.y);
-			double px = sx + distance*ax, py = sy + distance*ay;
-			double tx = px, ty = py;
-			double fontSize = style.labelSize;
-			ty -= fontSize*0.1; // Just a vertical alignment tweak
-
-			double space = fontSize*0.25;
-			double verticalWiggle = fontSize*0.3;
-			if (ax < -0.7) {
-				this->alignment = -1;
-				tx -= space;
-				ty += ay*verticalWiggle;
-			} else if (ax > 0.7) {
-				this->alignment = 1;
-				tx += space;
-				ty += ay*verticalWiggle;
-			} else if (ay > 0) {
-				ty += fontSize*0.8;
-				tx += ax*fontSize;
-				this->alignment = tx;
+			if (distance < 0) {
+				this->alignment = 0;
+				this->drawAt = {sx, sy};
 			} else {
-				ty -= fontSize*0.8;
-				tx += ax*fontSize;
-				this->alignment = tx;
-			}
-			
-			double lineDistance = distance - space;
-			drawLineFrom = drawLineTo = {px, py};
-			if (lineDistance > space) {
-				drawLineTo = {sx + ax*space, sy + ay*space};
-			}
+				double angle = direction*3.14159265358979/180;
+				double ax = std::cos(angle), ay = std::sin(angle);
 
-			this->drawAt = {tx, ty};
+				double px = sx + distance*ax, py = sy + distance*ay;
+				double tx = px, ty = py;
+				double fontSize = style.labelSize;
+				double letterHeight = fontSize*0.8;
+				ty -= fontSize*0.1; // Just a vertical alignment tweak
+
+				double space = fontSize*0.25;
+				double verticalWiggle = fontSize*0.3;
+				if (ax < -0.7) {
+					this->alignment = -1;
+					tx -= space;
+					ty += ay*verticalWiggle;
+				} else if (ax > 0.7) {
+					this->alignment = 1;
+					tx += space;
+					ty += ay*verticalWiggle;
+				} else if (ay > 0) {
+					ty += letterHeight;
+					tx += ax*fontSize;
+					this->alignment = ax;
+				} else {
+					ty -= letterHeight;
+					tx += ax*fontSize;
+					this->alignment = ax;
+				}
+				
+				double lineDistance = distance - space;
+				drawLineFrom = drawLineTo = {px, py};
+				if (lineDistance > space) {
+					drawLineTo = {sx + ax*space, sy + ay*space};
+				}
+
+				this->drawAt = {tx, ty};
+			}
 			this->cssClass = "svg-plot-label " + style.fillClass(styleIndex);
 
-			TextLabel<false>::layout(style);
+			TextLabel::layout(style);
 		}
+	public:
+		LineLabel(Axis &axisX, Axis &axisY, Point2D at, std::string name, double direction, double distance, int styleIndex) : TextLabel({0, 0}, 0, name), axisX(axisX), axisY(axisY), at(at), name(name), direction(direction), distance(distance), styleIndex(styleIndex) {}
 		
 		void writeLabel(std::ostream &o, const PlotStyle &style) override {
 			if (drawLineTo.x != drawLineFrom.x || drawLineTo.y != drawLineFrom.y) {
 				o << "<line class=\"svg-plot-tick " << style.strokeClass(styleIndex) << "\" x1=\"" << drawLineFrom.x << "\" x2=\"" << drawLineTo.x << "\" y1=\"" << drawLineFrom.y << "\" y2=\"" << drawLineTo.y << "\"/>";
 			}
-			TextLabel<false>::writeLabel(o, style);
+			TextLabel::writeLabel(o, style);
 		}
 	};
 
-	Line2D & label(double valueX, double valueY, std::string name, double direction=0, double distance=0) {
+	Line2D & label(double valueX, double valueY, std::string name) {
+		return label(valueX, valueY, name, 0, -1);
+	}
+
+	Line2D & label(double valueX, double valueY, std::string name, double degrees, double distance=0) {
 		axisX.autoValue(valueX);
 		axisY.autoValue(valueY);
-		this->addChild(new LineLabel(axisX, axisY, {valueX, valueY}, name, direction, distance, styleIndex));
+		this->addChild(new LineLabel(axisX, axisY, {valueX, valueY}, name, degrees, distance, styleIndex));
 		return *this;
 	}
 
-	Line2D & label(std::string name, double direction=0, double distance=0) {
-		Point latest = points.back();
-		return label(latest.x, latest.y, name, direction, distance);
+	Line2D & label(std::string name, double degrees=0, double distance=0) {
+		Point2D latest = points.back();
+		return label(latest.x, latest.y, name, degrees, distance);
 	}
 
-	Line2D & label(double xIsh, std::string name, double direction=0, double distance=0) {
+	Line2D & label(double xIsh, std::string name, double degrees=0, double distance=0) {
 		size_t closest = 0;
 		double closestError = -1;
 		for (size_t i = 0; i < points.size(); ++i) {
@@ -552,15 +710,14 @@ public:
 				closestError = std::abs(points[i].x - xIsh);
 			}
 		}
-		Point latest = points[closest];
-		return label(latest.x, latest.y, name, direction, distance);
+		Point2D latest = points[closest];
+		return label(latest.x, latest.y, name, degrees, distance);
 	}
 	
 	void writeData(std::ostream &o, const PlotStyle &style) override {
-		bool drawCombined = _drawLine && _drawFill && !hasFillToX && !hasFillToY;
-		if (_drawFill && !drawCombined) {
+		if (_drawFill) {
 			o << "<path class=\"";
-			o << "svg-plot-fill " << style.fillClass(styleIndex);
+			o << "svg-plot-fill " << style.fillClass(styleIndex) << " " << style.hatchClass(styleIndex);
 			o << "\" d=\"M";
 			for (auto &p : points) {
 				o << " " << axisX.map(p.x) << " " << axisY.map(p.y);
@@ -577,7 +734,6 @@ public:
 
 		if (_drawLine) {
 			o << "<path class=\"svg-plot-line " << style.strokeClass(styleIndex) << " " << style.dashClass(styleIndex);
-			if (drawCombined) o << "svg-plot-fill " << style.fillClass(styleIndex);
 			o << "\" d=\"M";
 			for (auto &p : points) {
 				o << " " << axisX.map(p.x) << " " << axisY.map(p.y);
@@ -590,12 +746,14 @@ public:
 	}
 };
 
-class Axes2D : public SvgDrawable {
+class Plot2D : public SvgFileDrawable {
 	int styleIndex = 0;
 public:
-	Axis1D x, y;
+	Axis x, y;
 
-	Axes2D(Axis1D x, Axis1D y) : x(x), y(y) {}
+	Plot2D() : Plot2D(260, 130) {}
+	Plot2D(double width, double height) : Plot2D({0, width}, {height, 0}) {}
+	Plot2D(Axis x, Axis y) : x(x), y(y) {}
 	
 	void writeData(std::ostream &o, const PlotStyle &style) override {
 		double padding = style.lineWidth*0.5;
@@ -603,17 +761,19 @@ public:
 		
 		o << "<rect class=\"svg-plot-axis\" x=\"" << x.drawMin() << "\" y=\"" << y.drawMin() << "\" width=\"" << x.drawSize() << "\" height=\"" << y.drawSize() << "\"/>";
 		for (auto &t : x.ticks) {
-			if (t.strength) {
+			if (t.strength != Tick::Strength::tick) {
 				double screenX = x.map(t.value);
+				bool isMajor = (t.strength == Tick::Strength::major);
 				bool isLeftBorder = std::abs(screenX - x.drawMin()) < 0.01; // 1% of a pixel is close enough
-				double extraTop = (t.strength == 2 && isLeftBorder && t.name.size()) ? style.tickH : 0; // Extend using horizontal tick even though it's vertical
-				o << "<line class=\"svg-plot-" << (t.strength == 2 ? "major" : "minor") << "\" y1=\"" << (y.drawMin() - extraTop) << "\" y2=\"" << y.drawMax() << "\" x1=\"" << screenX << "\" x2=\"" << screenX << "\"/>";
+				double extraTop = (isMajor && isLeftBorder && t.name.size()) ? style.tickH : 0; // Extend using horizontal tick even though it's vertical
+				o << "<line class=\"svg-plot-" << (isMajor ? "major" : "minor") << "\" y1=\"" << (y.drawMin() - extraTop) << "\" y2=\"" << y.drawMax() << "\" x1=\"" << screenX << "\" x2=\"" << screenX << "\"/>";
 			}
 		}
 		for (auto &t : y.ticks) {
-			if (t.strength) {
+			if (t.strength != Tick::Strength::tick) {
 				double screenY = y.map(t.value);
-				o << "<line class=\"svg-plot-" << (t.strength == 2 ? "major" : "minor") << "\" x1=\"" << x.drawMin() << "\" x2=\"" << x.drawMax() << "\" y1=\"" << screenY << "\" y2=\"" << screenY << "\"/>";
+				bool isMajor = (t.strength == Tick::Strength::major);
+				o << "<line class=\"svg-plot-" << (isMajor ? "major" : "minor") << "\" x1=\"" << x.drawMin() << "\" x2=\"" << x.drawMax() << "\" y1=\"" << screenY << "\" y2=\"" << screenY << "\"/>";
 			}
 		}
 
@@ -630,7 +790,7 @@ public:
 		for (auto &t : x.ticks) {
 			double screenX = x.map(t.value);
 			if (t.name.size()) {
-				o << "<line class=\"svg-plot-tick\" y1=\"" << y.drawMax() << "\" y2=\"" << (y.drawMax() + style.valueSize*0.5) << "\" x1=\"" << screenX << "\" x2=\"" << screenX << "\"/>";
+				o << "<line class=\"svg-plot-tick\" y1=\"" << y.drawMax() << "\" y2=\"" << (y.drawMax() + style.tickV) << "\" x1=\"" << screenX << "\" x2=\"" << screenX << "\"/>";
 			}
 		}
 		for (auto &t : y.ticks) {
@@ -652,13 +812,13 @@ public:
 		for (auto &t : x.ticks) {
 			if (t.name.size()) {
 				double screenX = x.map(t.value);
-				auto *label = new TextLabel<true>({screenX, screenY}, 0, t.name, "svg-plot-value");
+				auto *label = new TextLabel({screenX, screenY}, 0, t.name, "svg-plot-value", false, true);
 				this->addChild(label);
 			}
 		}
 		if (x.label().size()) {
 			double midX = (x.drawMax() + x.drawMin())*0.5;
-			auto *label = new TextLabel<true>({midX, screenY + (style.labelSize + style.valueSize)*0.5}, 0, x.label(), "svg-plot-label");
+			auto *label = new TextLabel({midX, screenY + (style.labelSize + style.valueSize)*0.5}, 0, x.label(), "svg-plot-label", false, true);
 			this->addChild(label);
 		}
 		double screenX = x.drawMin() - style.tickH - style.textPadding;
@@ -666,14 +826,14 @@ public:
 		for (auto &t : y.ticks) {
 			if (t.name.size()) {
 				double screenY = y.map(t.value);
-				auto *label = new TextLabel<true>({screenX, screenY}, -1, t.name, "svg-plot-value");
+				auto *label = new TextLabel({screenX, screenY}, -1, t.name, "svg-plot-value", false, true);
 				longestLabel = std::max(longestLabel, estimateUtf8Width(t.name.c_str()));
 				this->addChild(label);
 			}
 		}
 		if (y.label().size()) {
 			double midY = (y.drawMax() + y.drawMin())*0.5;
-			auto *label = new TextLabel<true>({screenX - style.textPadding*1.5 - longestLabel*style.valueSize, midY}, 0, y.label(), "svg-plot-label", true);
+			auto *label = new TextLabel({screenX - style.textPadding*1.5 - longestLabel*style.valueSize, midY}, 0, y.label(), "svg-plot-label", true, true);
 			this->addChild(label);
 		}
 
@@ -687,8 +847,8 @@ public:
 		SvgDrawable::layout(style);
 	};
 	
-	Line2D & line(int style) {
-		Line2D *line = new Line2D(this->x, this->y, style);
+	Line2D & line(int styleIndex) {
+		Line2D *line = new Line2D(this->x, this->y, styleIndex);
 		this->addChild(line);
 		return *line;
 	}
@@ -696,75 +856,45 @@ public:
 		return line(styleIndex++);
 	}
 
-	Line2D & fill(int style) {
-		return line(style).drawLine(false).drawFill(true);
+	Line2D & fill(int styleIndex) {
+		return line(styleIndex).drawLine(false).drawFill(true);
 	}
 	Line2D & fill() {
 		return fill(styleIndex++);
 	}
 };
 
-class Plot : public SvgDrawable {
-	double width = 4.8*72*0.75;
-	double height = 2.5*72*0.75;
+class Figure : SvgFileDrawable {
 public:
 	PlotStyle style;
 
-	Axes2D & axes(double widthPt, double heightPt) {
-		Axes2D *axes = new Axes2D({0, widthPt}, {heightPt, 0});
+	Plot2D & plot(double widthPt, double heightPt) {
+		Plot2D *axes = new Plot2D({0, widthPt}, {heightPt, 0});
 		this->addChild(axes);
 		return *axes;
 	}
-	Axes2D & axes() {
-		return axes(width, height);
+	Plot2D & plot() {
+		Plot2D *axes = new Plot2D();
+		this->addChild(axes);
+		return *axes;
 	}
 	
+	// Convenience for creating certain types
 	template<class ...Args>
-	Axis1D::Tick tick(Args ...args) {
-		return Axis1D::Tick(args...);
+	Tick tick(Args ...args) {
+		return Tick(args...);
 	}
 		
 	void layout(const PlotStyle &style) override {
 		this->bounds = {0, 0, 0, 0};
-		SvgDrawable::layout(style);
-		this->bounds.left -= style.padding;
-		this->bounds.right += style.padding;
-		this->bounds.top -= style.padding;
-		this->bounds.bottom += style.padding;
+		SvgFileDrawable::layout(style);
 	}
-
+	
 	void write(std::ostream &o) {
-		this->layoutIfNeeded(style);
-		o << "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n";
-		o << "<svg class=\"svg-plot\" width=\"" << bounds.width() << "pt\" height=\"" << bounds.height() << "pt\" version=\"1.1\" viewBox=\"" << bounds.left << " " << bounds.top << " " << bounds.width() << " " << bounds.height() << "\" preserveAspectRatio=\"xMidYMid\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">";
-
-		o << "<rect class=\"svg-plot-bg\" x=\"" << this->bounds.left << "\" y=\"" << this->bounds.top << "\" width=\"" << this->bounds.width() << "\" height=\"" << this->bounds.height() << "\"/>";
-		SvgDrawable::writeData(o, style);
-		SvgDrawable::writeLabel(o, style);
-
-		o << "<style>";
-		std::stringstream cssStream;
-		style.css(cssStream);
-		std::string css = cssStream.str();
-		const char *c = css.c_str();
-		// Strip tabs and newlines;
-		while (*c) {
-			if (*c != '\t' && *c != '\n') {
-				// skip space before {
-				if (*c != ' ' || *(c + 1) != '{') {
-					o << (*c);
-				}
-			}
-			// skip space after :
-			if ((*c == ':' || *c == ',') && *(c + 1) == ' ') ++c;
-			++c;
-		}
-		o << "</style><script>var q={};location.href.replace(/^[^#]*#?/,'').split('\\x26').forEach(function(p,D){D=decodeURIComponent;if(p){p=p.split('=');q[D(p.shift())]=D(p.join('='))}});var d=document,r=d.rootElement,s=d.getElementsByTagName('style')[0];if(q.style){s.textContent='@import \"'+q.style+'\";'+s.textContent}if(q.css){s.textContent+=q.css}</script></svg>";
+		SvgFileDrawable::write(o, style);
 	}
-
 	void write(std::string svgFile) {
-		std::ofstream s(svgFile);
-		write(s);
+		SvgFileDrawable::write(svgFile, style);
 	}
 };
 
@@ -824,7 +954,7 @@ static double estimateUtf8Width(const char *utf8Str) {
 	return total;
 }
 
-
+/// @}
 }}; // namespace
 
 #endif // include guard

@@ -14,26 +14,26 @@
 
 namespace signalsmith { namespace plot {
 
-	/**	@defgroup Plots Plots
-		@brief Basic C++ plotting
-		
-		To use, set up a `Figure` or `Plot2D`, add elements to it, and then write with `.write("output.svg")`.
-		\image html default-2d.svg An example plot
-		
-		Elements are drawn hierarchically, but generally in reverse order, so you should add your most important elements first.
+/**	@defgroup Plots Plots
+	@brief Basic C++ plotting
+	
+	To use, set up a `Figure` or `Plot2D`, add elements to it, and then write with `.write("output.svg")`.
+	\image html default-2d.svg An example plot
+	
+	Elements are drawn hierarchically, but generally in reverse order, so you should add your most important elements first.
 
-		@{
-		@file
-	**/
+	Elements can have a "style index" which simultaneously loops through colour/dash/hatch sequences, for increased greyscale/colourblind support.
+ 		\image html style-sequence.svg
 
-/// Estimates string width encoded with UTF-8
+	@{
+	@file
+**/
+
 static double estimateUtf8Width(const char *utf8Str);
 
 /** Plotting style, used for both layout and SVG rendering.
 	The baseline CSS style is produced based on `.colours` and `.dashes`. You can add your own `prefix`/`suffix`, as well as changing sizes and colour/dash/hatch sequences.
  		\image html custom-2d.svg
-	The colour/dash/hatch sequences are different lengths, to increase the number of combinations - although if you're relying on this, you might be plotting too many things.
- 		\image html style-sequence.svg
 */
 class PlotStyle {
 public:
@@ -77,7 +77,6 @@ public:
 	double tickH = 4, tickV = 5;
 	double textPadding = 5;
 
-	/// Extra CSS to add to the output
 	std::string prefix = "", suffix = "";
 	void css(std::ostream &o) const {
 		o << prefix;
@@ -234,14 +233,12 @@ public:
 	SvgDrawable(const SvgDrawable &other) = delete;
 	SvgDrawable & operator =(const SvgDrawable &other) = delete;
 
-	/// The base implementation iterates over children in latest-first
 	virtual void writeData(std::ostream &o, const PlotStyle &style) {
 		// Write in reverse order
 		for (int i = children.size() - 1; i >= 0; --i) {
 			children[i]->writeData(o, style);
 		}
 	}
-	/// There are two layers: the data layer and the label layer.
 	virtual void writeLabel(std::ostream &o, const PlotStyle &style) {
 		// Write in reverse order
 		for (int i = children.size() - 1; i >= 0; --i) {
@@ -306,9 +303,7 @@ public:
 			}
 			o << "</mask>";
 			double spacing = style.hatchSpacing*hatch.spaceScale;
-			o << "<pattern id=\"svg-plot-hatch" << i << "-pattern\" class=\"svg-plot-hatch\" x=\"0\" y=\"0\" width=\"10\" height=\"" << spacing << R"SVG(" patternUnits="userSpaceOnUse" stroke="#FFF" fill="none">
-				<line x1="-1" y1=")SVG" << (spacing*0.5) << R"SVG(" x2="11" y2=")SVG" << (spacing*0.5) << R"SVG(" />
-			</pattern>)SVG";
+			o << "<pattern id=\"svg-plot-hatch" << i << "-pattern\" class=\"svg-plot-hatch\" x=\"0\" y=\"0\" width=\"10\" height=\"" << spacing << "\" patternUnits=\"userSpaceOnUse\" stroke=\"#FFF\" fill=\"none\"><line x1=\"-1\" y1=\"" << (spacing*0.5) << "\" x2=\"11\" y2=\"" << (spacing*0.5) << "\" /></pattern>";
 		}
 		o << "</defs>";
 
@@ -570,10 +565,10 @@ public:
 	}
 };
 
-/** A line and/or fill, on a 2D plot.
+/** A line on a 2D plot, with fill and/or stroke
+	\image html filled-circles.svg
 */
 class Line2D : public SvgDrawable {
-protected:
 	bool _drawLine = true;
 	bool _drawFill = false;
 	bool hasFillToX = false, hasFillToY = false;
@@ -592,14 +587,13 @@ public:
 		return *this;
 	}
 	
-	///@name Styling
 	/// @{
-	/// Turn on/off the line.
+	///@name Draw config
+
 	Line2D & drawLine(bool draw) {
 		_drawLine = draw;
 		return *this;
 	}
-	/// Turn on/off the fill.
 	Line2D & drawFill(bool draw) {
 		_drawFill = draw;
 		return *this;

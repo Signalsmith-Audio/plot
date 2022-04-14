@@ -8,8 +8,7 @@ out/examples: *.cpp ../*.h
 		examples.cpp -o out/examples
 
 clean:
-	rm -rf out
-
+	rm -rf out html
 
 doxygen:
 	doxygen Doxyfile-local
@@ -21,5 +20,7 @@ doxygen:
 	cp -r examples/* html/doc/examples/
 
 publish: examples doxygen
+	cp ../plot.h plot.h
 	publish-signalsmith-raw /code/plot
+	rm plot.h
 	cd .. && publish-signalsmith-git /code/plot.git

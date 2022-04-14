@@ -4,6 +4,7 @@ PROJECT_BRIEF = A minimal C++ plotting library
 
 OUTPUT_DIRECTORY = .
 
-INPUT = ../plot.h ../README.md 
+INPUT = ../
+EXCLUDE = ./
 
 IMAGE_PATH = examples

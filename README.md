@@ -25,7 +25,7 @@ It is created and maintained mostly for internal Signalsmith use, so I'm adding 
 
 ## How to use
 
-It's a single header-only dependency:
+All you need is [the header file](../plot.h):
 
 ```cpp
 #include "plot.h";

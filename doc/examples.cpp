@@ -1,5 +1,4 @@
 #include "../plot.h"
-#include "../sigplot.h"
 
 #include <cmath>
 #include <algorithm>
@@ -27,7 +26,7 @@ int main() {
 	}
 	
 	{ // Demonstrating default colour/dash sequence
-		signalsmith::plot::Plot2D plot(320, 100);
+		signalsmith::plot::Plot2D plot(320, 80);
 		
 		// It will add default ticks unless you specify something, even a blank list
 		plot.y.minor();
@@ -49,6 +48,7 @@ int main() {
 		figure.style.lineWidth = 2;
 		figure.style.valueSize = 9;
 		figure.style.textAspect = 1.1;
+		figure.style.fillOpacity = 0.6;
 		// Swap the first two colours, the second two dashes, and the 1st/3rd hatches
 		std::swap(figure.style.colours[0], figure.style.colours[1]);
 		std::swap(figure.style.dashes[1], figure.style.dashes[2]);
@@ -115,6 +115,8 @@ int main() {
 		circle(0, 1, 1.25).label(-0.5, 1.5, "B");
 		circle(1, 1, 1.25).label(1.5, 1.5, "C");
 		circle(1, 0, 1.25).label(1.5, -0.5, "D");
+		
+		circle(0.5, 0.5, 2).drawFill(false).drawLine(true).label(0.5, -1.5, "outer boundary", 90);
 		
 		plot.write("filled-circles.svg");
 	}

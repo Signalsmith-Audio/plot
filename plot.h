@@ -37,7 +37,7 @@ static double estimateUtf8Width(const char *utf8Str);
 */
 class PlotStyle {
 public:
-	std::vector<std::string> colours = {"#000", "#000"};//{"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
+	std::vector<std::string> colours = {"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
 	std::vector<std::vector<double>> dashes = {{}, {1.2, 1.2}, {2.8, 1.6}, {5, 4}, {4, 1, 1, 1, 1, 1}, {10, 3}, {4, 2, 1, 2}};
 	struct Hatch {
 		std::vector<double> angles;

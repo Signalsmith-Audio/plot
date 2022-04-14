@@ -14,14 +14,15 @@ It is created and maintained mostly for internal Signalsmith use, so I'm adding 
 	* styling mostly done via CSS
 	* customisable CSS, colour-/dash-sequences and various sizes 
 * explicit labelling (no legends)
-* ticks are at edges, but axes are just major gridlines
+* values labelled with three levels: major/minor/tick
+* no explicit axis-lines, use major gridlines instead
 
 ### Current limitations
 
-* Only 2D axes supported
-* One axis per plot
-* No automatic label placement or de-collision
-* Linear axis ranges only
+* only 2D axes supported
+* one axis per plot
+* no automatic label placement or de-collision
+* text lengths are heuristically estimated
 
 ## How to use
 
@@ -46,6 +47,8 @@ axes.y.range(std::log, 1, 1000);
 ```
 
 ## Tests
+
+There aren't any unit tests, just some smoke-test example plots.
 
 Tests are `.cpp` files in `doc/tests/`, and are run (from `doc/`) with `make test`.  Individual sub-directories (`tests/foo`) can be run with `make test-foo`.
 

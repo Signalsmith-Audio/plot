@@ -61,3 +61,6 @@ out/test-%: $(shell find .. -iname "*.h") $(shell find tests/$* -iname "*.cpp")
 
 doxygen:
 	doxygen Doxyfile-local
+	mkdir -p html/doc
+	mkdir -p html/doc/images
+	cp -r images/* html/doc/images

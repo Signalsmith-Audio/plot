@@ -1,11 +1,13 @@
-#ifndef SIGNALSMITH_SIG_PLOT_H
-#define SIGNALSMITH_SIG_PLOT_H
+#ifndef SIGNALSMITH_PLOT_H
+#define SIGNALSMITH_PLOT_H
 
 #include <fstream>
 #include <memory>
 #include <functional>
 #include <vector>
 #include <array>
+#include <cmath>
+#include <sstream>
 
 namespace signalsmith { namespace plot {
 
@@ -388,9 +390,11 @@ class TextLabel : public SvgDrawable {
 		} else {
 			tx += textWidth*alignment;
 		}
-		o << " x=\"" << tx << "\" y=\"" << ty << "\"";
 		if (vertical) {
-			o << " transform-origin=\"" << tx << " " << ty << "\" transform=\"rotate(-90)\"";
+			o << " x=\"0\" y=\"0\"";
+			o << " transform=\"rotate(-90) translate(" << -ty << " " << tx << ")\"";
+		} else {
+			o << " x=\"" << tx << "\" y=\"" << ty << "\"";
 		}
 		o << ">";
 		escape(o, text);
@@ -706,19 +710,22 @@ class Plot : public SvgDrawable {
 public:
 	PlotStyle style;
 
-	Axes2D & axes() {
-		Axes2D *axes = new Axes2D({0, width}, {height, 0});
+	Axes2D & axes(double widthPt, double heightPt) {
+		Axes2D *axes = new Axes2D({0, widthPt}, {heightPt, 0});
 		this->addChild(axes);
 		return *axes;
+	}
+	Axes2D & axes() {
+		return axes(width, height);
 	}
 	
 	template<class ...Args>
 	Axis1D::Tick tick(Args ...args) {
 		return Axis1D::Tick(args...);
 	}
-	
+		
 	void layout(const PlotStyle &style) override {
-		this->bounds = {0, width, 0, height};
+		this->bounds = {0, 0, 0, 0};
 		SvgDrawable::layout(style);
 		this->bounds.left -= style.padding;
 		this->bounds.right += style.padding;

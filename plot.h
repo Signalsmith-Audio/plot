@@ -32,11 +32,26 @@ namespace signalsmith { namespace plot {
 static double estimateUtf8Width(const char *utf8Str);
 
 /** Plotting style, used for both layout and SVG rendering.
-	The baseline CSS style is produced based on `.colours` and `.dashes`. You can add your own `prefix`/`suffix`, as well as changing sizes and colour/dash/hatch sequences.
+	The baseline CSS style is produced using various sizes, plus `.colours`, `.dashes` and `.hatches`.  You can also add your own CSS with `.prefix`/`.suffix`.
  		\image html custom-2d.svg
 */
 class PlotStyle {
 public:
+	double padding = 10;
+	double labelSize = 12;
+	double valueSize = 10;
+	double lineWidth = 1.5;
+	double fillOpacity = 0.25;
+	double hatchWidth = 1;
+	double hatchSpacing = 3;
+	// Use this scale the text-size estimates if you use a particularly wide font
+	double textAspect = 1;
+	double tickH = 4, tickV = 5;
+	double textPadding = 5;
+
+	/// Extra CSS
+	std::string prefix = "", suffix = "";
+
 	std::vector<std::string> colours = {"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
 	std::vector<std::vector<double>> dashes = {{}, {1.2, 1.2}, {2.8, 1.6}, {5, 4}, {4, 1, 1, 1, 1, 1}, {10, 3}, {4, 2, 1, 2}};
 
@@ -49,6 +64,7 @@ public:
 		Hatch(std::vector<double> angles, double lineScale, double spaceScale) : angles(angles), lineScale(lineScale), spaceScale(spaceScale) {}
 	};
 	std::vector<Hatch> hatches = {{}, {-50}, {{30}, 0.9, 0.8}, {{8, 93}, 0.7, 1}};
+
 	std::string strokeClass(int styleIndex) const {
 		if (styleIndex < 0 || colours.size() == 0) return "";
 		return "svg-plot-s" + std::to_string(styleIndex%(int)colours.size());
@@ -65,19 +81,7 @@ public:
 		if (styleIndex < 0 || hatches.size() == 0) return "";
 		return "svg-plot-h" + std::to_string(styleIndex%(int)hatches.size());
 	}
-	double padding = 10;
-	double labelSize = 12;
-	double valueSize = 10;
-	double lineWidth = 1.5;
-	double fillOpacity = 0.25;
-	double hatchWidth = 1;
-	double hatchSpacing = 3;
-	// Use this scale the text-size estimates if you use a particularly wide font
-	double textAspect = 1;
-	double tickH = 4, tickV = 5;
-	double textPadding = 5;
-
-	std::string prefix = "", suffix = "";
+	
 	void css(std::ostream &o) const {
 		o << prefix;
 		o << R"CSS(

@@ -30,7 +30,7 @@ namespace signalsmith { namespace plot {
 static double estimateUtf8Width(const char *utf8Str);
 
 /** Plotting style, used for both layout and SVG rendering.
-	The baseline CSS style is produced based on `.colours` and `.dashes`. You can add your own `prefix`/`suffix`, as well as changing sizes and colour/dash sequences.
+	The baseline CSS style is produced based on `.colours` and `.dashes`. You can add your own `prefix`/`suffix`, as well as changing sizes and colour/dash/hatch sequences.
  		\image html custom-2d.svg
 	The colour/dash/hatch sequences are different lengths, to increase the number of combinations - although if you're relying on this, you might be plotting too many things.
  		\image html style-sequence.svg
@@ -39,6 +39,7 @@ class PlotStyle {
 public:
 	std::vector<std::string> colours = {"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
 	std::vector<std::vector<double>> dashes = {{}, {1.2, 1.2}, {2.8, 1.6}, {5, 4}, {4, 1, 1, 1, 1, 1}, {10, 3}, {4, 2, 1, 2}};
+
 	struct Hatch {
 		std::vector<double> angles;
 		double lineScale = 1, spaceScale=1;
@@ -569,8 +570,7 @@ public:
 	}
 };
 
-/** A line on a 2D plot.
-	\image html filled-lines.svg
+/** A line and/or fill, on a 2D plot.
 */
 class Line2D : public SvgDrawable {
 protected:
@@ -594,26 +594,30 @@ public:
 	
 	///@name Styling
 	/// @{
+	/// Turn on/off the line.
 	Line2D & drawLine(bool draw) {
 		_drawLine = draw;
 		return *this;
 	}
+	/// Turn on/off the fill.
 	Line2D & drawFill(bool draw) {
 		_drawFill = draw;
 		return *this;
 	}
-	Line2D & fillToX(double x) {
-		_drawFill = true;
-		hasFillToX = true;
-		hasFillToY = false;
-		fillTo = {x, 0};
-		return *this;
-	}
+	/// Start/end the fill at a given Y value
 	Line2D & fillToY(double y) {
 		_drawFill = true;
 		hasFillToX = false;
 		hasFillToY = true;
 		fillTo = {0, y};
+		return *this;
+	}
+	/// Start/end the fill at a given X value
+	Line2D & fillToX(double x) {
+		_drawFill = true;
+		hasFillToX = true;
+		hasFillToY = false;
+		fillTo = {x, 0};
 		return *this;
 	}
 	/// @}

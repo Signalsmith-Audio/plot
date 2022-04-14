@@ -31,27 +31,7 @@ It's a single header-only dependency:
 #include "plot.h";
 ```
 
-The full API is available as [Doxygen](https://signalsmith-audio.co.uk/code/plot/html/group___plots.html). 
-
-### Overall approach
-
-You create a top-level object, which could be a `Figure` or a `Plot2D`:
-
-```cpp
-signalsmith::plot::Plot2D plot;
-```
-
-When you create a sub-object (line, sub-plot, etc.), you are returned a reference.  These elements are deliberately not copyable, so if you use `auto` instead of `auto &` it will complain.
-
-```cpp
-auto &line = plot.line();
-```
-
-Many methods return a reference to the object, allowing you to chain them together, e.g.:
-
-```cpp
-plot.x.major(0, 10).minor(5);
-```
+View the [API docs](https://signalsmith-audio.co.uk/code/plot/html/group___plots.html) for complete info. 
 
 ### Basic example: drawing lines
 
@@ -87,6 +67,24 @@ See [examples.cpp](examples.cpp) for code examples.  Here are the images generat
 ![Default plot style](examples/default-2d.svg)
 ![Custom plot style](examples/custom-2d.svg)
 ![Style sequence](examples/style-sequence.svg)
+![Intersecting circles](examples/filled-circles.svg)
+
+### API principles
+
+You create a top-level object, which could be a `Figure` or a `Plot2D`:
+```cpp
+signalsmith::plot::Plot2D plot;
+```
+
+When you create a sub-object (line, sub-plot, etc.), you are returned a reference.  These elements are deliberately not copyable, so if you use `auto` instead of `auto &` it will complain.
+```cpp
+auto &line = plot.line();
+```
+
+Many methods return a reference to the object, allowing you to chain them together, e.g.:
+```cpp
+plot.x.major(0, 10).minor(5);
+```
 
 ## Testing
 

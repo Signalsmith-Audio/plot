@@ -54,6 +54,9 @@ int main() {
 		std::swap(figure.style.dashes[1], figure.style.dashes[2]);
 		std::swap(figure.style.hatches[0], figure.style.hatches[2]);
 		figure.style.suffix = R"CSS(
+			.svg-plot-value, .svg-plot-label {
+				font-family: Verdana,sans-serif;
+			}
 			.svg-plot-axis {
 				fill: #EEE;
 			}
@@ -95,7 +98,7 @@ int main() {
 		figure.write("custom-2d.svg");
 	}
 
-	{ // Filled lines
+	{ // Filled circles
 		signalsmith::plot::Plot2D plot(200, 200);
 		// No ticks or grid
 		plot.x.major();
@@ -103,7 +106,7 @@ int main() {
 
 		auto circle = [&](double x, double y, double r) -> signalsmith::plot::Line2D & {
 			auto &line = plot.fill();
-			for (double a = 0; a < 2*M_PI; a += 0.05) {
+			for (double a = 0; a < 2*M_PI + 0.05; a += 0.05) {
 				line.add(x + std::cos(a)*r, y + std::sin(a)*r);
 			}
 			return line;
@@ -113,6 +116,6 @@ int main() {
 		circle(1, 1, 1.25).label(1.5, 1.5, "C");
 		circle(1, 0, 1.25).label(1.5, -0.5, "D");
 		
-		plot.write("filled-lines.svg");
+		plot.write("filled-circles.svg");
 	}
 }

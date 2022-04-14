@@ -14,8 +14,12 @@ clean:
 doxygen:
 	doxygen Doxyfile-local
 
-	mkdir -p html/doc
-	cp examples.cpp html/doc/examples.cpp
+	cp examples.cpp html/examples.cpp
 
+	mkdir -p html/doc
 	mkdir -p html/doc/examples
 	cp -r examples/* html/doc/examples/
+
+publish: examples doxygen
+	publish-signalsmith-raw /code/plot
+	cd .. && publish-signalsmith-git /code/plot.git

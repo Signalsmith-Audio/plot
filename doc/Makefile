@@ -13,14 +13,14 @@ clean:
 doxygen:
 	doxygen Doxyfile-local
 
-	cp examples.cpp html/examples.cpp
-
-	mkdir -p html/doc
+	# Files linked from the README
+	cp ../plot.h html/plot.h
+	cp ../LICENSE.txt html/LICENSE.txt
 	mkdir -p html/doc/examples
+	cp examples.cpp html/doc/examples.cpp
 	cp -r examples/* html/doc/examples/
 
+# Depends on my personal toolchain, you shouldn't need to use this
 publish: examples doxygen
-	cp ../plot.h plot.h
 	publish-signalsmith-raw /code/plot
-	rm plot.h
 	cd .. && publish-signalsmith-git /code/plot.git

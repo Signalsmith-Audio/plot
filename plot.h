@@ -1,3 +1,6 @@
+/** Signalsmith's Basic C++ Plots
+@copyright Licensed as 0BSD.  If you need anything else, get in touch. */
+
 #ifndef SIGNALSMITH_PLOT_H
 #define SIGNALSMITH_PLOT_H
 

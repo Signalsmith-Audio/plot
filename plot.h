@@ -233,7 +233,7 @@ public:
 		return raw(" ", name, "=\"").write(args...).raw("\"");
 	}
 	
-	/// XML tag helper, should only ever exist as rvalue reference
+	/// XML tag helper, closing the tag when it's destroyed
 	struct Tag {
 		SvgWriter &writer;
 		bool active = true;
@@ -277,7 +277,7 @@ public:
 	There are two layers: data and labels.  The last-registered elements are drawn first.
 */
 class SvgDrawable {
-	std::vector<std::unique_ptr<SvgDrawable>> children;
+	std::vector<std::unique_ptr<SvgDrawable>> children, layoutChildren;
 	bool hasLayout = false;
 protected:
 	struct Bounds {
@@ -296,13 +296,14 @@ protected:
 	
 	void invalidateLayout() {
 		hasLayout = false;
-		for (auto &c : children) c.invalidateLayout();
+		for (auto &c : children) c->invalidateLayout();
+		layoutChildren.resize(0);
 	}
 	void layoutIfNeeded(const PlotStyle &style) {
 		if (!hasLayout) this->layout(style);
 	}
 	virtual void layout(const PlotStyle &style) {
-		for (auto &c : children) {
+		auto processChild = [&](std::unique_ptr<SvgDrawable> &c) {
 			c->layoutIfNeeded(style);
 			if (bounds.set) {
 				if (c->bounds.set) {
@@ -314,8 +315,13 @@ protected:
 			} else {
 				bounds = c->bounds;
 			}
-		}
+		};
+		for (auto &c : layoutChildren) processChild(c);
+		for (auto &c : children) processChild(c);
 	};
+	void addLayoutChild(SvgDrawable *child) {
+		layoutChildren.emplace_back(child);
+	}
 public:
 	SvgDrawable() {}
 	virtual ~SvgDrawable() {}
@@ -328,12 +334,18 @@ public:
 	SvgDrawable & operator =(const SvgDrawable &other) = delete;
 
 	virtual void writeData(SvgWriter &svg, const PlotStyle &style) {
+		for (int i = layoutChildren.size() - 1; i >= 0; --i) {
+			layoutChildren[i]->writeData(svg, style);
+		}
 		// Write in reverse order
 		for (int i = children.size() - 1; i >= 0; --i) {
 			children[i]->writeData(svg, style);
 		}
 	}
 	virtual void writeLabel(SvgWriter &svg, const PlotStyle &style) {
+		for (int i = layoutChildren.size() - 1; i >= 0; --i) {
+			layoutChildren[i]->writeLabel(svg, style);
+		}
 		// Write in reverse order
 		for (int i = children.size() - 1; i >= 0; --i) {
 			children[i]->writeLabel(svg, style);
@@ -885,13 +897,13 @@ public:
 
 		for (auto &t : x.ticks) {
 			double screenX = x.map(t.value);
-			if (t.name.size()) {
+			if (t.name.size() && style.tickV != 0) {
 				svg.line(screenX, y.drawMax(), screenX, y.drawMax() + style.tickV)
 					.attr("class", "svg-plot-tick");
 			}
 		}
 		for (auto &t : y.ticks) {
-			if (t.name.size()) {
+			if (t.name.size() && style.tickH != 0) {
 				double screenY = y.map(t.value);
 				svg.line(x.drawMin() - style.tickH, screenY, x.drawMin(), screenY)
 					.attr("class", "svg-plot-tick");
@@ -905,41 +917,43 @@ public:
 		x.autoSetup();
 		y.autoSetup();
 
+		double tv = std::max(style.tickV, 0.0), th = std::max(style.tickH, 0.0);
+
 		// Add labels for axes
-		double screenY = y.drawMax() + style.tickV + style.valueSize*0.5 + style.textPadding;
+		double screenY = y.drawMax() + tv + style.valueSize*0.5 + style.textPadding;
 		for (auto &t : x.ticks) {
 			if (t.name.size()) {
 				double screenX = x.map(t.value);
 				auto *label = new TextLabel({screenX, screenY}, 0, t.name, "svg-plot-value", false, true);
-				this->addChild(label);
+				this->addLayoutChild(label);
 			}
 		}
 		if (x.label().size()) {
 			double midX = (x.drawMax() + x.drawMin())*0.5;
 			auto *label = new TextLabel({midX, screenY + (style.labelSize + style.valueSize)*0.5}, 0, x.label(), "svg-plot-label", false, true);
-			this->addChild(label);
+			this->addLayoutChild(label);
 		}
-		double screenX = x.drawMin() - style.tickH - style.textPadding;
+		double screenX = x.drawMin() - tv - style.textPadding;
 		double longestLabel = 0;
 		for (auto &t : y.ticks) {
 			if (t.name.size()) {
 				double screenY = y.map(t.value);
 				auto *label = new TextLabel({screenX, screenY}, -1, t.name, "svg-plot-value", false, true);
 				longestLabel = std::max(longestLabel, estimateUtf8Width(t.name.c_str()));
-				this->addChild(label);
+				this->addLayoutChild(label);
 			}
 		}
 		if (y.label().size()) {
 			double midY = (y.drawMax() + y.drawMin())*0.5;
 			auto *label = new TextLabel({screenX - style.textPadding*1.5 - longestLabel*style.valueSize, midY}, 0, y.label(), "svg-plot-label", true, true);
-			this->addChild(label);
+			this->addLayoutChild(label);
 		}
 
 		this->bounds = {
-			x.drawMin() - style.tickH,
-			x.drawMax() + style.tickH,
-			y.drawMin() - style.tickV,
-			y.drawMax() + style.tickV
+			x.drawMin() - th,
+			x.drawMax() + th,
+			y.drawMin() - tv,
+			y.drawMax() + tv
 		};
 
 		SvgDrawable::layout(style);

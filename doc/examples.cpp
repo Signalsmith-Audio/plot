@@ -5,6 +5,8 @@
 
 /** @file */
 
+signalsmith::plot::PlotStyle customStyle();
+
 int main() {
 	{ // Basic example
 		signalsmith::plot::Plot2D plot;
@@ -40,45 +42,14 @@ int main() {
 			plot.x.tick(i);
 		}
 		
-		plot.write("style-sequence.svg");
+		// Remove bottom ticks
+		auto style = plot.defaultStyle();
+		style.tickV = 0;
+		plot.write("style-sequence.svg", style);
 	}
 
 	{ // Custom style, using a figure
 		signalsmith::plot::Figure figure;
-		figure.style.lineWidth = 2;
-		figure.style.valueSize = 9;
-		figure.style.textAspect = 1.1;
-		figure.style.fillOpacity = 0.6;
-		// Swap the first two colours, the second two dashes, and the 1st/3rd hatches
-		std::swap(figure.style.colours[0], figure.style.colours[1]);
-		std::swap(figure.style.dashes[1], figure.style.dashes[2]);
-		std::swap(figure.style.hatches[0], figure.style.hatches[2]);
-		figure.style.suffix = R"CSS(
-			.svg-plot-value, .svg-plot-label {
-				font-family: Verdana,sans-serif;
-			}
-			.svg-plot-axis {
-				fill: #EEE;
-			}
-			.svg-plot-tick {
-				stroke: #666;
-				stroke-width: 0.75px;
-			}
-			.svg-plot-value {
-				fill: #666;
-				opacity: 0.8;
-				font-weight: bold;
-			}
-			.svg-plot-major {
-				stroke: #FFF;
-				stroke-width: 1.5px;
-			}
-			.svg-plot-minor {
-				stroke: #FFF;
-				stroke-width: 0.75px;
-				stroke-dasharray: none;
-			}
-		)CSS";
 
 		auto &plot = figure.plot();
 
@@ -95,6 +66,7 @@ int main() {
 		sin.label("sin(x)");
 		cos.label("cos(x)");
 
+		figure.style = customStyle();
 		figure.write("custom-2d.svg");
 	}
 
@@ -120,4 +92,46 @@ int main() {
 		
 		plot.write("filled-circles.svg");
 	}
+}
+
+signalsmith::plot::PlotStyle customStyle() {
+	signalsmith::plot::PlotStyle style;
+	style.lineWidth = 2;
+	style.valueSize = 9;
+	style.textAspect = 1.1;
+	style.fillOpacity = 0.6;
+	style.tickH = style.tickV = 0;
+	
+	// Swap the first two colours, the second two dashes, and the 1st/3rd hatches
+	std::swap(style.colours[0], style.colours[1]);
+	std::swap(style.dashes[1], style.dashes[2]);
+	std::swap(style.hatches[0], style.hatches[2]);
+	
+	style.suffix = R"CSS(
+		.svg-plot-value, .svg-plot-label {
+			font-family: Verdana,sans-serif;
+		}
+		.svg-plot-axis {
+			fill: #EEE;
+		}
+		.svg-plot-tick {
+			stroke: #666;
+			stroke-width: 0.75px;
+		}
+		.svg-plot-value {
+			fill: #666;
+			opacity: 0.8;
+			font-weight: bold;
+		}
+		.svg-plot-major {
+			stroke: #FFF;
+			stroke-width: 1.5px;
+		}
+		.svg-plot-minor {
+			stroke: #FFF;
+			stroke-width: 0.75px;
+			stroke-dasharray: none;
+		}
+	)CSS";
+	return style;
 }

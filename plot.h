@@ -947,7 +947,7 @@ public:
 			auto *label = new TextLabel({midX, screenY + (style.labelSize + style.valueSize)*0.5}, 0, x.label(), "svg-plot-label", false, true);
 			this->addLayoutChild(label);
 		}
-		double screenX = x.drawMin() - tv - style.textPadding;
+		double screenX = x.drawMin() - th - style.textPadding;
 		double longestLabel = 0;
 		for (auto &t : y.tickList) {
 			if (t.name.size()) {

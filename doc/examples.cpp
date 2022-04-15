@@ -3,8 +3,6 @@
 #include <cmath>
 #include <algorithm>
 
-/** @file */
-
 signalsmith::plot::PlotStyle customStyle();
 
 int main() {

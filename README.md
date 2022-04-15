@@ -6,7 +6,7 @@ It's maintained mostly for internal Signalsmith Audio use, so I'm adding feature
 
 ![example plot](doc/examples/default-2d.svg)
 
-## Features / design choices
+## Design choices
 
 * SVG output only
 * auto-styled lines and fills

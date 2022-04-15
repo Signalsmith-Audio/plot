@@ -469,7 +469,19 @@ struct Tick {
 	Tick(T value) : value(double(value)), name(std::to_string(value)) {}
 };
 
-/// A map from values to screen-space
+/** A map from values to screen-space.
+
+	Individual grid/ticks can be added with `.major()`/`.minor()`/`.tick()`.
+	\code
+		axis.major(4); // default label
+		axis.major(5, "five"); // explicit label
+	\endcode
+	
+	Multiple grids/ticks can be added using `.majors()`/`.minors()`/`.ticks()`, which accept a variable number of values:
+	\code
+		axis.majors(0, 10).minors(2, 4, 6, 8);
+	\endcode
+*/
 class Axis {
 	std::function<double(double)> unitMap;
 	double autoMin, autoMax;
@@ -488,6 +500,13 @@ public:
 		return std::abs(drawHigh - drawLow);
 	}
 
+	Axis(double drawLow, double drawHigh) : drawLow(drawLow), drawHigh(drawHigh) {
+		linear(0, 1);
+		autoScale = true;
+		autoLabel = true;
+	}
+
+	/// Register a value for the auto-scale
 	void autoValue(double v) {
 		if (!autoScale) return;
 		if (!hasAutoValue) {
@@ -501,14 +520,13 @@ public:
 	void autoSetup() {
 		if (hasAutoValue) {
 			if (autoScale) linear(autoMin, autoMax);
-			if (autoLabel) minor(autoMin, autoMax);
+			if (autoLabel) minors(autoMin, autoMax);
 		}
 	}
-
-	Axis(double drawLow, double drawHigh) : drawLow(drawLow), drawHigh(drawHigh) {
-		linear(0, 1);
-		autoScale = true;
-		autoLabel = true;
+	/// Prevent auto-labelling
+	Axis & blank() {
+		autoLabel = false;
+		return *this;
 	}
 	
 	Axis & label(std::string l) {
@@ -544,82 +562,58 @@ public:
 		return drawLow + unit*(drawHigh - drawLow);
 	}
 
-	std::vector<Tick> ticks;
-	
-	Axis &major() {
+	std::vector<Tick> tickList;
+
+	template<class ...Args>
+	Axis & major(Args &&...args) {
+		Tick t(args...);
+		autoValue(t.value);
+		t.strength = Tick::Strength::major;
+		tickList.push_back(t);
 		autoLabel = false;
 		return *this;
 	}
 	template<class ...Args>
-	Axis &major(Tick tick, Args ...args) {
-		autoValue(tick.value);
-		tick.strength = Tick::Strength::major;
-		ticks.push_back(tick);
-		return major(args...);
-	}
-	template<typename T>
-	Axis & majorRange(T start, T end, T step, bool useLabels=true) {
-		step = std::abs(step);
-		if (start <= end) {
-			for (T t = start; t <= end; t += step) {
-				useLabels ? major(t) : major({double(t), ""});
-			}
-		} else {
-			for (T t = end; t >= start; t -= step) {
-				useLabels ? major(t) : major({double(t), ""});
-			}
-		}
-		return *this;
-	}
-	Axis &minor() {
+	Axis & minor(Args &&...args) {
+		Tick t(args...);
+		autoValue(t.value);
+		t.strength = Tick::Strength::minor;
+		tickList.push_back(t);
 		autoLabel = false;
 		return *this;
 	}
 	template<class ...Args>
-	Axis &minor(Tick tick, Args ...args) {
-		autoValue(tick.value);
-		tick.strength = Tick::Strength::minor;
-		ticks.push_back(tick);
-		return minor(args...);
-	}
-	template<typename T>
-	Axis & minorRange(T start, T end, T step, bool useLabels=true) {
-		step = std::abs(step);
-		if (start <= end) {
-			for (T t = start; t <= end; t += step) {
-				useLabels ? minor(t) : minor({double(t), ""});
-			}
-		} else {
-			for (T t = end; t >= start; t -= step) {
-				useLabels ? minor(t) : minor({double(t), ""});
-			}
-		}
-		return *this;
-	}
-	Axis &tick() {
-		autoLabel = false;
-		return *this;
-	}
-	template<class ...Args>
-	Axis &tick(Tick t, Args ...args) {
+	Axis & tick(Args &&...args) {
+		Tick t(args...);
 		autoValue(t.value);
 		t.strength = Tick::Strength::tick;
-		ticks.push_back(t);
-		return tick(args...);
-	}
-	template<typename T>
-	Axis & tickRange(T start, T end, T step, bool useLabels=true) {
-		step = std::abs(step);
-		if (start <= end) {
-			for (T t = start; t <= end; t += step) {
-				useLabels ? tick(t) : tick({double(t), ""});
-			}
-		} else {
-			for (T t = end; t >= start; t -= step) {
-				useLabels ? tick(t) : tick({double(t), ""});
-			}
-		}
+		tickList.push_back(t);
+		autoLabel = false;
 		return *this;
+	}
+	
+	Axis &majors() {
+		return *this;
+	}
+	template<class ...Args>
+	Axis &majors(Tick tick, Args ...args) {
+		return major(tick).majors(args...);
+	}
+	Axis &minors() {
+		autoLabel = false;
+		return *this;
+	}
+	template<class ...Args>
+	Axis &minors(Tick tick, Args ...args) {
+		return minor(tick).minors(args...);
+	}
+	Axis & ticks() {
+		autoLabel = false;
+		return *this;
+	}
+	template<class ...Args>
+	Axis & ticks(Tick t, Args ...args) {
+		return tick(t).ticks(args...);
 	}
 };
 
@@ -878,7 +872,7 @@ public:
 
 		svg.rect(x.drawMin(), y.drawMin(), x.drawSize(), y.drawSize())
 			.attr("class", "svg-plot-axis");
-		for (auto &t : x.ticks) {
+		for (auto &t : x.tickList) {
 			if (t.strength != Tick::Strength::tick) {
 				double screenX = x.map(t.value);
 				bool isMajor = (t.strength == Tick::Strength::major);
@@ -889,7 +883,7 @@ public:
 					.attr("class", "svg-plot-", isMajor ? "major" : "minor");
 			}
 		}
-		for (auto &t : y.ticks) {
+		for (auto &t : y.tickList) {
 			if (t.strength != Tick::Strength::tick) {
 				double screenY = y.map(t.value);
 				bool isMajor = (t.strength == Tick::Strength::major);
@@ -910,14 +904,14 @@ public:
 		svg.raw("<g>");
 		SvgDrawable::writeLabel(svg, style);
 
-		for (auto &t : x.ticks) {
+		for (auto &t : x.tickList) {
 			double screenX = x.map(t.value);
 			if (t.name.size() && style.tickV != 0) {
 				svg.line(screenX, y.drawMax(), screenX, y.drawMax() + style.tickV)
 					.attr("class", "svg-plot-tick");
 			}
 		}
-		for (auto &t : y.ticks) {
+		for (auto &t : y.tickList) {
 			if (t.name.size() && style.tickH != 0) {
 				double screenY = y.map(t.value);
 				svg.line(x.drawMin() - style.tickH, screenY, x.drawMin(), screenY)
@@ -936,7 +930,7 @@ public:
 
 		// Add labels for axes
 		double screenY = y.drawMax() + tv + style.valueSize*0.5 + style.textPadding;
-		for (auto &t : x.ticks) {
+		for (auto &t : x.tickList) {
 			if (t.name.size()) {
 				double screenX = x.map(t.value);
 				auto *label = new TextLabel({screenX, screenY}, 0, t.name, "svg-plot-value", false, true);
@@ -950,7 +944,7 @@ public:
 		}
 		double screenX = x.drawMin() - tv - style.textPadding;
 		double longestLabel = 0;
-		for (auto &t : y.ticks) {
+		for (auto &t : y.tickList) {
 			if (t.name.size()) {
 				double screenY = y.map(t.value);
 				auto *label = new TextLabel({screenX, screenY}, -1, t.name, "svg-plot-value", false, true);
@@ -1006,12 +1000,6 @@ public:
 		return *axes;
 	}
 	
-	// Convenience for creating certain types
-	template<class ...Args>
-	Tick tick(Args ...args) {
-		return Tick(args...);
-	}
-		
 	void layout(const PlotStyle &style) override {
 		this->bounds = {0, 0, 0, 0};
 		SvgFileDrawable::layout(style);

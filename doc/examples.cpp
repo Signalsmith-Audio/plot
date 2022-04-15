@@ -13,7 +13,7 @@ int main() {
 
 		// Customise the axes
 		plot.x.major(0).tick(10).label("time");
-		plot.y.major(0).minor(-1, 1).label("signal");
+		plot.y.major(0).minors(-1, 1).label("signal");
 
 		// Add some data with `.add(x, y)`
 		auto &sin = plot.line(), &cos = plot.line();
@@ -30,8 +30,8 @@ int main() {
 	{ // Demonstrating default colour/dash sequence
 		signalsmith::plot::Plot2D plot(360, 80);
 		
-		// It will add default ticks unless you specify something, even a blank list
-		plot.y.minor();
+		// Prevent it from adding default ticks
+		plot.y.blank();
 		
 		// Add a filled triangle for each one
 		for (int i = 0; i < 10; ++i) {
@@ -55,7 +55,7 @@ int main() {
 
 		// Customise the axes
 		plot.x.major(0).tick(10).label("time");
-		plot.y.major(0).minor(-1, 1).label("signal");
+		plot.y.major(0).minors(-1, 1).label("signal");
 
 		// Add some data with `.add(x, y)`
 		auto &sin = plot.line().fillToY(0), &cos = plot.line().fillToY(0);
@@ -73,8 +73,8 @@ int main() {
 	{ // Filled circles
 		signalsmith::plot::Plot2D plot(200, 200);
 		// No ticks or grid
-		plot.x.major();
-		plot.y.major();
+		plot.x.blank();
+		plot.y.blank();
 
 		auto circle = [&](double x, double y, double r) -> signalsmith::plot::Line2D & {
 			auto &line = plot.fill();

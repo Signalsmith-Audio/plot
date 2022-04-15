@@ -184,6 +184,93 @@ public:
 	}
 };
 
+/// Wrapper for slightly more semantic code when writing SVGs
+class SvgWriter {
+	std::ostream &output;
+public:
+	SvgWriter(std::ostream &output) : output(output) {}
+
+	SvgWriter & raw() {
+		return *this;
+	}
+	template<class First, class ...Args>
+	SvgWriter & raw(First &&first, Args &&...args) {
+		output << first;
+		return raw(args...);
+	}
+
+	SvgWriter & write() {
+		return *this;
+	}
+	template<class First, class ...Args>
+	SvgWriter & write(First &&v, Args &&...args) {
+		// Only strings get escaped
+		return raw(v).write(args...);
+	}
+	template<class ...Args>
+	SvgWriter & write(const char *str, Args &&...args) {
+		while (*str) {
+			if (*str == '<') {
+				output << "&lt;";
+			} else if (*str == '&') {
+				output << "&amp;";
+			} else if (*str == '"') {
+				output << "&quot;";
+			} else {
+				output << (*str);
+			}
+			++str;
+		}
+		return write(args...);
+	}
+	template<class ...Args>
+	SvgWriter & write(const std::string &str, Args &&...args) {
+		return write(str.c_str(), args...);
+	}
+	
+	template<class ...Args>
+	SvgWriter & attr(const char *name, Args &&...args) {
+		return raw(" ", name, "=\"").write(args...).raw("\"");
+	}
+	
+	/// XML tag helper, should only ever exist as rvalue reference
+	struct Tag {
+		SvgWriter &writer;
+		bool active = true;
+		bool selfClose;
+
+		Tag(SvgWriter &writer, bool selfClose=false) : writer(writer), selfClose(selfClose) {}
+		// Move-construct only
+		Tag(Tag &&other) : writer(other.writer), selfClose(other.selfClose) {
+			other.active = false;
+		}
+		~Tag() {
+			if (active) writer.raw(selfClose ? "/>" : ">");
+		}
+
+		template<class ...Args>
+		Tag & attr(const char *name, Args &&...args) & {
+			writer.attr(name, args...);
+			return *this;
+		}
+		template<class ...Args>
+		Tag && attr(const char *name, Args &&...args) && {
+			writer.attr(name, args...);
+			return std::move(*this);
+		}
+	};
+	Tag tag(const char *name, bool selfClose=false) {
+		raw("<", name);
+		return Tag(*this, selfClose);
+	}
+	Tag line(double x1, double y1, double x2, double y2) {
+		return tag("line", true).attr("x1", x1).attr("x2", x2).attr("y1", y1).attr("y2", y2);
+	}
+	Tag rect(double x, double y, double w, double h) {
+		return tag("rect", true).attr("x", x).attr("y", y).attr("width", w).attr("height", h);
+	}
+};
+
 /** Any drawable element.
 	Not copyable/assignable because that's usually a mistake.
 	
@@ -240,36 +327,19 @@ public:
 	SvgDrawable(const SvgDrawable &other) = delete;
 	SvgDrawable & operator =(const SvgDrawable &other) = delete;
 
-	virtual void writeData(std::ostream &o, const PlotStyle &style) {
+	virtual void writeData(SvgWriter &svg, const PlotStyle &style) {
 		// Write in reverse order
 		for (int i = children.size() - 1; i >= 0; --i) {
-			children[i]->writeData(o, style);
+			children[i]->writeData(svg, style);
 		}
 	}
-	virtual void writeLabel(std::ostream &o, const PlotStyle &style) {
+	virtual void writeLabel(SvgWriter &svg, const PlotStyle &style) {
 		// Write in reverse order
 		for (int i = children.size() - 1; i >= 0; --i) {
-			children[i]->writeLabel(o, style);
+			children[i]->writeLabel(svg, style);
 		}
 	}
 
-	static void escape(std::ostream &o, const char *str) {
-		while (*str) {
-			if (*str == '<') {
-				o << "&lt;";
-			} else if (*str == '&') {
-				o << "&amp;";
-			} else if (*str == '"') {
-				o << "&quot;";
-			} else {
-				o << (*str);
-			}
-			++str;
-		}
-	}
-	static void escape(std::ostream &o, const std::string &str) {
-		escape(o, str.c_str());
-	}
 };
 
 /// Top-level objects which can generate SVG files
@@ -288,33 +358,46 @@ public:
 		bounds.right += style.padding;
 		bounds.top -= style.padding;
 		bounds.bottom += style.padding;
+		
+		SvgWriter svg(o);
+		svg.raw("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
+		svg.tag("svg").attr("version", "1.1").attr("class", "svg-plot")
+			.attr("xmlns", "http://www.w3.org/2000/svg")
+			.attr("width", bounds.width(), "pt").attr("height", bounds.height(), "pt")
+			.attr("viewBox", bounds.left, " ", bounds.top, " ", bounds.width(), " ", bounds.height())
+			.attr("preserveAspectRatio", "xMidYMid");
 
-		o << "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n";
-		o << "<svg class=\"svg-plot\" width=\"" << bounds.width() << "pt\" height=\"" << bounds.height() << "pt\" version=\"1.1\" viewBox=\"" << bounds.left << " " << bounds.top << " " << bounds.width() << " " << bounds.height() << "\" preserveAspectRatio=\"xMidYMid\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">";
-
-		o << "<rect class=\"svg-plot-bg\" x=\"" << this->bounds.left << "\" y=\"" << this->bounds.top << "\" width=\"" << this->bounds.width() << "\" height=\"" << this->bounds.height() << "\"/>";
-		this->writeData(o, style);
-		this->writeLabel(o, style);
+		svg.rect(this->bounds.left, this->bounds.top, this->bounds.width(), this->bounds.height())
+			.attr("class", "svg-plot-bg");
+		this->writeData(svg, style);
+		this->writeLabel(svg, style);
 
 		int maxBounds = std::ceil(std::max(
 			std::max(std::abs(this->bounds.left), std::abs(this->bounds.right)),
 			std::max(std::abs(this->bounds.top), std::abs(this->bounds.bottom))
 		)*std::sqrt(2));
-		o << "<defs>";
+		svg.raw("<defs>");
 		for (size_t i = 0; i < style.hatches.size(); ++i) {
 			auto &hatch = style.hatches[i];
 			if (!hatch.angles.size()) continue;
-			o << "<mask id=\"svg-plot-hatch" << i << "\">";
+			svg.tag("mask").attr("id", "svg-plot-hatch", i);
 			for (double angle : hatch.angles) {
-				o << "<rect x=\"" << -maxBounds << "\" y=\"" << -maxBounds << "\" width=\"" << (2*maxBounds) << "\" height=\"" << (2*maxBounds) << "\" fill=\"url(#svg-plot-hatch" << i << "-pattern)\" style=\"transform:rotate(" << angle << "deg)\"/>";
+				svg.rect(-maxBounds, -maxBounds, 2*maxBounds, 2*maxBounds)
+					.attr("fill", "url(#svg-plot-hatch", i, "-pattern)")
+					.attr("style", "transform:rotate(", angle, "deg)");
 			}
-			o << "</mask>";
+			svg.raw("</mask>");
 			double spacing = style.hatchSpacing*hatch.spaceScale;
-			o << "<pattern id=\"svg-plot-hatch" << i << "-pattern\" class=\"svg-plot-hatch\" x=\"0\" y=\"0\" width=\"10\" height=\"" << spacing << "\" patternUnits=\"userSpaceOnUse\" stroke=\"#FFF\" fill=\"none\"><line x1=\"-1\" y1=\"" << (spacing*0.5) << "\" x2=\"11\" y2=\"" << (spacing*0.5) << "\" /></pattern>";
+			svg.tag("pattern").attr("patternUnits", "userSpaceOnUse")
+				.attr("id", "svg-plot-hatch", i, "-pattern").attr("class", "svg-plot-hatch")
+				.attr("x", 0).attr("y", 0).attr("width", 10).attr("height", spacing)
+				.attr("stroke", "#FFF").attr("fill", "none");
+			svg.line(-1, spacing*0.5, 11, spacing*0.5);
+			svg.raw("</pattern>");
 		}
-		o << "</defs>";
+		svg.raw("</defs>");
 
-		o << "<style>";
+		svg.raw("<style>");
 		std::stringstream cssStream;
 		style.css(cssStream);
 		std::string css = cssStream.str();
@@ -331,13 +414,13 @@ public:
 			if ((*c == ':' || *c == ',') && *(c + 1) == ' ') ++c;
 			++c;
 		}
-		o << "</style></svg>";
+		svg.raw("</style></svg>");
 	}
 	void write(std::string svgFile, const PlotStyle &style) {
 		std::ofstream s(svgFile);
 		write(s, style);
 	}
-	// We don't have a stored style, so use the default one
+	// If we aren't given a style, use the default one
 	void write(std::ostream &o) {
 		this->write(o, this->defaultStyle());
 	}
@@ -520,29 +603,28 @@ struct Point2D {
 
 class TextLabel : public SvgDrawable {
 	double textWidth = 0;
-	void write(std::ostream &o) {
-		o << "<text class=\"";
-		escape(o, cssClass);
-		o << "\"";
-		double tx = drawAt.x, ty = drawAt.y;
-		if (alignment > 0.5) {
-			o << " style=\"text-anchor:start\"";
-			tx += textWidth*(alignment - 1);
-		} else if (alignment < -0.5) {
-			o << " style=\"text-anchor:end\"";
-			tx += textWidth*(alignment + 1);
-		} else {
-			tx += textWidth*alignment;
+	void write(SvgWriter &svg) {
+		{
+			auto text = svg.tag("text").attr("class", cssClass);
+			double tx = drawAt.x, ty = drawAt.y;
+			if (alignment > 0.5) {
+				text.attr("style", "text-anchor:start");
+				tx += textWidth*(alignment - 1);
+			} else if (alignment < -0.5) {
+				text.attr("style", "text-anchor:end");
+				tx += textWidth*(alignment + 1);
+			} else {
+				tx += textWidth*alignment;
+			}
+			if (vertical) {
+				text.attr("x", 0).attr("y", 0)
+					.attr("transform", "rotate(-90) translate(", -ty, " ", tx, ")");
+			} else {
+				text.attr("x", tx).attr("y", ty);
+			}
 		}
-		if (vertical) {
-			o << " x=\"0\" y=\"0\"";
-			o << " transform=\"rotate(-90) translate(" << -ty << " " << tx << ")\"";
-		} else {
-			o << " x=\"" << tx << "\" y=\"" << ty << "\"";
-		}
-		o << ">";
-		escape(o, text);
-		o << "</text>";
+		svg.write(text);
+		svg.raw("</text>");
 	}
 protected:
 	Point2D drawAt;
@@ -567,8 +649,8 @@ protected:
 public:
 	TextLabel(Point2D at, double alignment, std::string text, std::string cssClass="svg-plot-label", bool vertical=false, bool isValue=false) : drawAt(at), alignment(alignment), text(text), cssClass(cssClass), vertical(vertical), isValue(isValue) {}
 	
-	void writeLabel(std::ostream &o, const PlotStyle &) override {
-		write(o);
+	void writeLabel(SvgWriter &svg, const PlotStyle &) override {
+		write(svg);
 	}
 };
 
@@ -682,11 +764,12 @@ public:
 	public:
 		LineLabel(Axis &axisX, Axis &axisY, Point2D at, std::string name, double direction, double distance, int styleIndex) : TextLabel({0, 0}, 0, name), axisX(axisX), axisY(axisY), at(at), name(name), direction(direction), distance(distance), styleIndex(styleIndex) {}
 		
-		void writeLabel(std::ostream &o, const PlotStyle &style) override {
+		void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
 			if (drawLineTo.x != drawLineFrom.x || drawLineTo.y != drawLineFrom.y) {
-				o << "<line class=\"svg-plot-tick " << style.strokeClass(styleIndex) << "\" x1=\"" << drawLineFrom.x << "\" x2=\"" << drawLineTo.x << "\" y1=\"" << drawLineFrom.y << "\" y2=\"" << drawLineTo.y << "\"/>";
+				svg.line(drawLineFrom.x, drawLineFrom.y, drawLineTo.x, drawLineTo.y)
+					.attr("class", "svg-plot-tick ", style.strokeClass(styleIndex));
 			}
-			TextLabel::writeLabel(o, style);
+			TextLabel::writeLabel(svg, style);
 		}
 	};
 
@@ -719,35 +802,35 @@ public:
 		return label(latest.x, latest.y, name, degrees, distance);
 	}
 	
-	void writeData(std::ostream &o, const PlotStyle &style) override {
+	void writeData(SvgWriter &svg, const PlotStyle &style) override {
 		if (_drawFill) {
-			o << "<path class=\"";
-			o << "svg-plot-fill " << style.fillClass(styleIndex) << " " << style.hatchClass(styleIndex);
-			o << "\" d=\"M";
+			svg.raw("<path")
+				.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
+			svg.raw(" d=\"M");
 			for (auto &p : points) {
-				o << " " << axisX.map(p.x) << " " << axisY.map(p.y);
+				svg.raw(" ", axisX.map(p.x), " ", axisY.map(p.y));
 			}
 			if (hasFillToX) {
-				o << " " << axisX.map(fillTo.x) << " " << axisY.map(points.back().y);
-				o << " " << axisX.map(fillTo.x) << " " << axisY.map(points[0].y);
+				svg.raw(" ", axisX.map(fillTo.x), " ", axisY.map(points.back().y));
+				svg.raw(" ", axisX.map(fillTo.x), " ", axisY.map(points[0].y));
 			} else if (hasFillToY) {
-				o << " " << axisX.map(points.back().x) << " " << axisY.map(fillTo.y);
-				o << " " << axisX.map(points[0].x) << " " << axisY.map(fillTo.y);
+				svg.raw(" ", axisX.map(points.back().x), " ", axisY.map(fillTo.y));
+				svg.raw(" ", axisX.map(points[0].x), " ", axisY.map(fillTo.y));
 			}
-			o << "\" />";
+			svg.raw("\"/>");
 		}
 
 		if (_drawLine) {
-			o << "<path class=\"svg-plot-line " << style.strokeClass(styleIndex) << " " << style.dashClass(styleIndex);
-			o << "\" d=\"M";
+			svg.raw("<path")
+				.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), " ", style.dashClass(styleIndex));
+			svg.raw(" d=\"M");
 			for (auto &p : points) {
-				o << " " << axisX.map(p.x) << " " << axisY.map(p.y);
+				svg.raw(" ", axisX.map(p.x), " ", axisY.map(p.y));
 			}
-			o << "\" />";
+			svg.raw("\"/>");
 		}
-			
 
-		SvgDrawable::writeData(o, style);
+		SvgDrawable::writeData(svg, style);
 	}
 };
 
@@ -760,51 +843,59 @@ public:
 	Plot2D(double width, double height) : Plot2D({0, width}, {height, 0}) {}
 	Plot2D(Axis x, Axis y) : x(x), y(y) {}
 	
-	void writeData(std::ostream &o, const PlotStyle &style) override {
+	void writeData(SvgWriter &svg, const PlotStyle &style) override {
 		double padding = style.lineWidth*0.5;
 		long clipId = rand();
-		
-		o << "<rect class=\"svg-plot-axis\" x=\"" << x.drawMin() << "\" y=\"" << y.drawMin() << "\" width=\"" << x.drawSize() << "\" height=\"" << y.drawSize() << "\"/>";
+
+		svg.rect(x.drawMin(), y.drawMin(), x.drawSize(), y.drawSize())
+			.attr("class", "svg-plot-axis");
 		for (auto &t : x.ticks) {
 			if (t.strength != Tick::Strength::tick) {
 				double screenX = x.map(t.value);
 				bool isMajor = (t.strength == Tick::Strength::major);
 				bool isLeftBorder = std::abs(screenX - x.drawMin()) < 0.01; // 1% of a pixel is close enough
 				double extraTop = (isMajor && isLeftBorder && t.name.size()) ? style.tickH : 0; // Extend using horizontal tick even though it's vertical
-				o << "<line class=\"svg-plot-" << (isMajor ? "major" : "minor") << "\" y1=\"" << (y.drawMin() - extraTop) << "\" y2=\"" << y.drawMax() << "\" x1=\"" << screenX << "\" x2=\"" << screenX << "\"/>";
+				
+				svg.line(screenX, y.drawMin() - extraTop, screenX, y.drawMax())
+					.attr("class", "svg-plot-", isMajor ? "major" : "minor");
 			}
 		}
 		for (auto &t : y.ticks) {
 			if (t.strength != Tick::Strength::tick) {
 				double screenY = y.map(t.value);
 				bool isMajor = (t.strength == Tick::Strength::major);
-				o << "<line class=\"svg-plot-" << (isMajor ? "major" : "minor") << "\" x1=\"" << x.drawMin() << "\" x2=\"" << x.drawMax() << "\" y1=\"" << screenY << "\" y2=\"" << screenY << "\"/>";
+				svg.line(x.drawMin(), screenY, x.drawMax(), screenY)
+					.attr("class", "svg-plot-", isMajor ? "major" : "minor");
 			}
 		}
 
-		o << "<clipPath id=\"clip" << clipId << "\"><rect x=\"" << (x.drawMin() - padding) << "\" y=\"" << (y.drawMin() - padding) << "\" width=\"" << (x.drawSize() + padding*2) << "\" height=\"" << (y.drawSize() + padding*2) << "\" /></clipPath>";
-		o << "<g clip-path=\"url(#clip" << clipId << "\">";
-		SvgDrawable::writeData(o, style);
-		o << "</g>";
+		svg.tag("clipPath").attr("id", "clip", clipId);
+		svg.rect(x.drawMin() - padding, y.drawMin() - padding, x.drawSize() + padding*2, y.drawSize() + padding*2);
+		svg.raw("</clipPath>");
+		svg.tag("g").attr("clip-path", "url(#clip", clipId, ")");
+		SvgDrawable::writeData(svg, style);
+		svg.raw("</g>");
 	}
 
-	void writeLabel(std::ostream &o, const PlotStyle &style) override {
-		o << "<g>";
-		SvgDrawable::writeLabel(o, style);
+	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
+		svg.raw("<g>");
+		SvgDrawable::writeLabel(svg, style);
 
 		for (auto &t : x.ticks) {
 			double screenX = x.map(t.value);
 			if (t.name.size()) {
-				o << "<line class=\"svg-plot-tick\" y1=\"" << y.drawMax() << "\" y2=\"" << (y.drawMax() + style.tickV) << "\" x1=\"" << screenX << "\" x2=\"" << screenX << "\"/>";
+				svg.line(screenX, y.drawMax(), screenX, y.drawMax() + style.tickV)
+					.attr("class", "svg-plot-tick");
 			}
 		}
 		for (auto &t : y.ticks) {
 			if (t.name.size()) {
 				double screenY = y.map(t.value);
-				o << "<line class=\"svg-plot-tick\" x1=\"" << (x.drawMin() - style.tickH) << "\" x2=\"" << x.drawMin() << "\" y1=\"" << screenY << "\" y2=\"" << screenY << "\"/>";
+				svg.line(x.drawMin() - style.tickH, screenY, x.drawMin(), screenY)
+					.attr("class", "svg-plot-tick");
 			}
 		}
-		o << "</g>";
+		svg.raw("</g>");
 	}
 
 	void layout(const PlotStyle &style) override {

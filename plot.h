@@ -839,7 +839,7 @@ class Plot2D : public SvgFileDrawable {
 public:
 	Axis x, y;
 
-	Plot2D() : Plot2D(260, 130) {}
+	Plot2D() : Plot2D(240, 130) {}
 	Plot2D(double width, double height) : Plot2D({0, width}, {height, 0}) {}
 	Plot2D(Axis x, Axis y) : x(x), y(y) {}
 	

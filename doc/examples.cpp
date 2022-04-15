@@ -26,7 +26,7 @@ int main() {
 	}
 	
 	{ // Demonstrating default colour/dash sequence
-		signalsmith::plot::Plot2D plot(320, 80);
+		signalsmith::plot::Plot2D plot(360, 80);
 		
 		// It will add default ticks unless you specify something, even a blank list
 		plot.y.minor();

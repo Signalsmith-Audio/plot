@@ -87,6 +87,10 @@ public:
 		if (counter.colour < 0 || colours.size() == 0) return "";
 		return "svg-plot-f" + std::to_string(counter.colour%(int)colours.size());
 	}
+	std::string textClass(const Counter &counter) const {
+		if (counter.colour < 0 || colours.size() == 0) return "";
+		return "svg-plot-t" + std::to_string(counter.colour%(int)colours.size());
+	}
 	std::string dashClass(const Counter &counter) const {
 		if (counter.dash < 0 || dashes.size() == 0) return "";
 		return "svg-plot-d" + std::to_string(counter.dash%(int)dashes.size());
@@ -315,6 +319,7 @@ protected:
 		if (!hasLayout) this->layout(style);
 	}
 	virtual void layout(const PlotStyle &style) {
+		hasLayout = true;
 		auto processChild = [&](std::unique_ptr<SvgDrawable> &c) {
 			c->layoutIfNeeded(style);
 			if (bounds.set) {
@@ -779,7 +784,7 @@ public:
 
 				this->drawAt = {tx, ty};
 			}
-			this->cssClass = "svg-plot-label " + style.fillClass(styleIndex);
+			this->cssClass = "svg-plot-label " + style.textClass(styleIndex);
 
 			TextLabel::layout(style);
 		}

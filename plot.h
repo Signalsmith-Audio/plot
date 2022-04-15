@@ -66,21 +66,34 @@ public:
 	};
 	std::vector<Hatch> hatches = {{}, {-50}, {{30}, 0.9, 0.8}, {{8, 93}, 0.7, 1}};
 
-	std::string strokeClass(int styleIndex) const {
-		if (styleIndex < 0 || colours.size() == 0) return "";
-		return "svg-plot-s" + std::to_string(styleIndex%(int)colours.size());
+	struct Counter {
+		int colour, dash, hatch;
+		Counter(int index=0) : colour(index), dash(index), hatch(index) {}
+
+		/// Increment the counter, and return the previous value
+		Counter bump() {
+			Counter result = *this;
+			++colour;
+			++dash;
+			++hatch;
+			return result;
+		}
+	};
+	std::string strokeClass(const Counter &counter) const {
+		if (counter.colour < 0 || colours.size() == 0) return "";
+		return "svg-plot-s" + std::to_string(counter.colour%(int)colours.size());
 	}
-	std::string fillClass(int styleIndex) const {
-		if (styleIndex < 0 || colours.size() == 0) return "";
-		return "svg-plot-f" + std::to_string(styleIndex%(int)colours.size());
+	std::string fillClass(const Counter &counter) const {
+		if (counter.colour < 0 || colours.size() == 0) return "";
+		return "svg-plot-f" + std::to_string(counter.colour%(int)colours.size());
 	}
-	std::string dashClass(int styleIndex) const {
-		if (styleIndex < 0 || dashes.size() == 0) return "";
-		return "svg-plot-d" + std::to_string(styleIndex%(int)dashes.size());
+	std::string dashClass(const Counter &counter) const {
+		if (counter.dash < 0 || dashes.size() == 0) return "";
+		return "svg-plot-d" + std::to_string(counter.dash%(int)dashes.size());
 	}
-	std::string hatchClass(int styleIndex) const {
-		if (styleIndex < 0 || hatches.size() == 0) return "";
-		return "svg-plot-h" + std::to_string(styleIndex%(int)hatches.size());
+	std::string hatchClass(const Counter &counter) const {
+		if (counter.hatch < 0 || hatches.size() == 0) return "";
+		return "svg-plot-h" + std::to_string(counter.hatch%(int)hatches.size());
 	}
 	
 	void css(std::ostream &o) const {
@@ -679,9 +692,10 @@ class Line2D : public SvgDrawable {
 	
 	Axis &axisX, &axisY;
 	std::vector<Point2D> points;
-	int styleIndex = 0;
 public:
-	Line2D(Axis &axisX, Axis &axisY, int styleIndex) : axisX(axisX), axisY(axisY), styleIndex(styleIndex) {}
+	PlotStyle::Counter styleIndex;
+
+	Line2D(Axis &axisX, Axis &axisY, PlotStyle::Counter styleIndex) : axisX(axisX), axisY(axisY), styleIndex(styleIndex) {}
 	
 	Line2D & add(double x, double y) {
 		points.push_back({x, y});
@@ -726,7 +740,7 @@ public:
 		// direction: 0=right, 1=up, 2=left, 3=down
 		double direction, distance;
 		Point2D drawLineFrom{0, 0}, drawLineTo{0, 0};
-		int styleIndex;
+		PlotStyle::Counter &styleIndex;
 	protected:
 		void layout(const PlotStyle &style) override {
 			double sx = axisX.map(at.x), sy = axisY.map(at.y);
@@ -776,7 +790,7 @@ public:
 			TextLabel::layout(style);
 		}
 	public:
-		LineLabel(Axis &axisX, Axis &axisY, Point2D at, std::string name, double direction, double distance, int styleIndex) : TextLabel({0, 0}, 0, name), axisX(axisX), axisY(axisY), at(at), name(name), direction(direction), distance(distance), styleIndex(styleIndex) {}
+		LineLabel(Axis &axisX, Axis &axisY, Point2D at, std::string name, double direction, double distance, PlotStyle::Counter &styleIndex) : TextLabel({0, 0}, 0, name), axisX(axisX), axisY(axisY), at(at), name(name), direction(direction), distance(distance), styleIndex(styleIndex) {}
 		
 		void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
 			if (drawLineTo.x != drawLineFrom.x || drawLineTo.y != drawLineFrom.y) {
@@ -849,9 +863,10 @@ public:
 };
 
 class Plot2D : public SvgFileDrawable {
-	int styleIndex = 0;
 public:
 	Axis x, y;
+	/// Style for the next auto-styled element
+	PlotStyle::Counter styleCounter;
 
 	Plot2D() : Plot2D(240, 130) {}
 	Plot2D(double width, double height) : Plot2D({0, width}, {height, 0}) {}
@@ -959,20 +974,20 @@ public:
 		SvgDrawable::layout(style);
 	};
 	
-	Line2D & line(int styleIndex) {
+	Line2D & line(PlotStyle::Counter styleIndex) {
 		Line2D *line = new Line2D(this->x, this->y, styleIndex);
 		this->addChild(line);
 		return *line;
 	}
 	Line2D & line() {
-		return line(styleIndex++);
+		return line(styleCounter.bump());
 	}
 
-	Line2D & fill(int styleIndex) {
+	Line2D & fill(PlotStyle::Counter styleIndex) {
 		return line(styleIndex).drawLine(false).drawFill(true);
 	}
 	Line2D & fill() {
-		return fill(styleIndex++);
+		return fill(styleCounter.bump());
 	}
 };
 

@@ -88,6 +88,7 @@ int main() {
 		circle(1, 1, 1.25).label(1.5, 1.5, "C");
 		circle(1, 0, 1.25).label(1.5, -0.5, "D");
 		
+		plot.styleCounter.dash = 0; // Those were just fills, so we reset the dash counter
 		circle(0.5, 0.5, 2).drawFill(false).drawLine(true).label(0.5, -1.5, "outer boundary", 90);
 		
 		plot.write("filled-circles.svg");

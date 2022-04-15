@@ -293,14 +293,17 @@ protected:
 		}
 	};
 	Bounds bounds;
-
+	
+	void invalidateLayout() {
+		hasLayout = false;
+		for (auto &c : children) c.invalidateLayout();
+	}
+	void layoutIfNeeded(const PlotStyle &style) {
+		if (!hasLayout) this->layout(style);
+	}
 	virtual void layout(const PlotStyle &style) {
-		if (hasLayout) {
-			assert(false); // shouldn't do this more than once
-		};
-		hasLayout = true;
 		for (auto &c : children) {
-			c->layout(style);
+			c->layoutIfNeeded(style);
 			if (bounds.set) {
 				if (c->bounds.set) {
 					bounds.left = std::min(bounds.left, c->bounds.left);
@@ -313,9 +316,6 @@ protected:
 			}
 		}
 	};
-	void layoutIfNeeded(const PlotStyle &style) {
-		if (!hasLayout) this->layout(style);
-	}
 public:
 	SvgDrawable() {}
 	virtual ~SvgDrawable() {}
@@ -350,7 +350,8 @@ public:
 	}
 
 	void write(std::ostream &o, const PlotStyle &style) {
-		this->layoutIfNeeded(style);
+		this->invalidateLayout();
+		this->layout(style);
 
 		// Add padding
 		auto bounds = this->bounds;
@@ -644,6 +645,7 @@ protected:
 		} else {
 			this->bounds = {x + textWidth*(alignment - 1)*0.5, x + textWidth*(alignment + 1)*0.5, y - fontSize*0.5, y + fontSize*0.5};
 		}
+		SvgDrawable::layout(style);
 	}
 
 public:

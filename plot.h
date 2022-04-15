@@ -687,7 +687,8 @@ class Line2D : public SvgDrawable {
 	bool _drawLine = true;
 	bool _drawFill = false;
 	bool hasFillToX = false, hasFillToY = false;
-	Point2D fillTo;
+	Point2D fillToPoint;
+	Line2D *fillToLine = nullptr;
 	
 	Axis &axisX, &axisY;
 	std::vector<Point2D> points;
@@ -719,7 +720,7 @@ public:
 		_drawFill = true;
 		hasFillToX = false;
 		hasFillToY = true;
-		fillTo = {0, y};
+		fillToPoint = {0, y};
 		return *this;
 	}
 	/// Start/end the fill at a given X value
@@ -727,7 +728,13 @@ public:
 		_drawFill = true;
 		hasFillToX = true;
 		hasFillToY = false;
-		fillTo = {x, 0};
+		fillToPoint = {x, 0};
+		return *this;
+	}
+	Line2D & fillTo(Line2D &other) {
+		_drawFill = true;
+		hasFillToX = hasFillToY = false;
+		fillToLine = &other;
 		return *this;
 	}
 	/// @}
@@ -837,12 +844,18 @@ public:
 			for (auto &p : points) {
 				svg.raw(" ", axisX.map(p.x), " ", axisY.map(p.y));
 			}
-			if (hasFillToX) {
-				svg.raw(" ", axisX.map(fillTo.x), " ", axisY.map(points.back().y));
-				svg.raw(" ", axisX.map(fillTo.x), " ", axisY.map(points[0].y));
+			if (fillToLine) {
+				auto &otherPoints = fillToLine->points;
+				for (int i = otherPoints.size() - 1; i >= 0; --i) {
+					auto &p = otherPoints[i];
+					svg.raw(" ", axisX.map(p.x), " ", axisY.map(p.y));
+				}
+			} else if (hasFillToX) {
+				svg.raw(" ", axisX.map(fillToPoint.x), " ", axisY.map(points.back().y));
+				svg.raw(" ", axisX.map(fillToPoint.x), " ", axisY.map(points[0].y));
 			} else if (hasFillToY) {
-				svg.raw(" ", axisX.map(points.back().x), " ", axisY.map(fillTo.y));
-				svg.raw(" ", axisX.map(points[0].x), " ", axisY.map(fillTo.y));
+				svg.raw(" ", axisX.map(points.back().x), " ", axisY.map(fillToPoint.y));
+				svg.raw(" ", axisX.map(points[0].x), " ", axisY.map(fillToPoint.y));
 			}
 			svg.raw("\"/>");
 		}

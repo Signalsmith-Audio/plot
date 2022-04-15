@@ -107,7 +107,7 @@ signalsmith::plot::PlotStyle customStyle() {
 	std::swap(style.dashes[1], style.dashes[2]);
 	std::swap(style.hatches[0], style.hatches[2]);
 	
-	style.suffix = R"CSS(
+	style.cssSuffix = R"CSS(
 		.svg-plot-value, .svg-plot-label {
 			font-family: Verdana,sans-serif;
 		}

@@ -35,7 +35,7 @@ namespace signalsmith { namespace plot {
 static double estimateUtf8Width(const char *utf8Str);
 
 /** Plotting style, used for both layout and SVG rendering.
-	The baseline CSS style is produced using various sizes, plus `.colours`, `.dashes` and `.hatches`.  You can also add your own CSS with `.prefix`/`.suffix`.
+	CSS is written inline in the SVG, generated from various sizes and `.colours`/`.dashes`/`.hatches`, plus `.cssPrefix`/`.cssSuffix`.
  		\image html custom-2d.svg
 */
 class PlotStyle {
@@ -52,9 +52,7 @@ public:
 	double tickH = 4, tickV = 5;
 	double textPadding = 5;
 
-	/// Extra CSS
-	std::string prefix = "", suffix = "";
-
+	std::string cssPrefix = "", cssSuffix = "";
 	std::vector<std::string> colours = {"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
 	std::vector<std::vector<double>> dashes = {{}, {1.2, 1.2}, {2.8, 1.6}, {5, 4}, {4, 1, 1, 1, 1, 1}, {10, 3}, {4, 2, 1, 2}};
 
@@ -86,7 +84,7 @@ public:
 	}
 	
 	void css(std::ostream &o) const {
-		o << prefix;
+		o << cssPrefix;
 		o << R"CSS(
 			.svg-plot {
 				stroke-linecap: butt;
@@ -180,7 +178,7 @@ public:
 				o << "#svg-plot-hatch" << i << "-pattern{stroke-width:" << hatchWidth*h.lineScale << "px}\n";
 			}
 		}
-		o << suffix;
+		o << cssSuffix;
 	}
 };
 
@@ -272,9 +270,10 @@ public:
 };
 
 /** Any drawable element.
-	Not copyable/assignable because that's usually a mistake.
+ 	
+	Each element has two layers: data and labels.  Child elements are drawn in reverse order, so the earliest ones are drawn on top.
 	
-	There are two layers: data and labels.  The last-registered elements are drawn first.
+	Copy/assign is disabled, to prevent accidental copying when you should be holding a reference.
 */
 class SvgDrawable {
 	std::vector<std::unique_ptr<SvgDrawable>> children, layoutChildren;
@@ -319,19 +318,20 @@ protected:
 		for (auto &c : layoutChildren) processChild(c);
 		for (auto &c : children) processChild(c);
 	};
+	/// These children are removed when the layout is invalidated
 	void addLayoutChild(SvgDrawable *child) {
 		layoutChildren.emplace_back(child);
 	}
 public:
 	SvgDrawable() {}
 	virtual ~SvgDrawable() {}
+	SvgDrawable(const SvgDrawable &other) = delete;
+	SvgDrawable & operator =(const SvgDrawable &other) = delete;
 
+	/// Takes ownership of the child
 	void addChild(SvgDrawable *child) {
 		children.emplace_back(child);
 	}
-
-	SvgDrawable(const SvgDrawable &other) = delete;
-	SvgDrawable & operator =(const SvgDrawable &other) = delete;
 
 	virtual void writeData(SvgWriter &svg, const PlotStyle &style) {
 		for (int i = layoutChildren.size() - 1; i >= 0; --i) {

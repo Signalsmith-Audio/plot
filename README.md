@@ -14,7 +14,8 @@ It's maintained mostly for internal Signalsmith Audio use, so I'm adding feature
 	* styling done via (customisable) CSS where possible
 * explicit labelling (no legends)
 * values labelled with three levels: major/minor/tick
-* no explicit axis-lines, use major gridlines instead
+	* no explicit axis-lines, use major gridlines instead
+* attempts not to draw out-of-view data
 
 ### Current limitations
 

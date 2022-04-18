@@ -217,17 +217,13 @@ struct Bounds {
 		bottom = std::max(bottom, other.bottom);
 		return *this;
 	}
-	Bounds & shrinkTo(const Bounds &other) {
-		left = std::max(left, other.left);
-		top = std::max(top, other.top);
-		right = std::min(right, other.right);
-		bottom = std::min(bottom, other.bottom);
-		return *this;
+	Bounds pad(double padding) {
+		return {left - padding, right + padding, top - padding, bottom + padding};
 	}
-	/// Bitmask indicating which direction(s) the point is outside the bounds
-	char outside(double x, double y, double padding) {
-		return (left - x > padding) | (2*(x - right > padding)) | (4*(top - y > padding)) | (8*(y - bottom > padding));
-	}
+};
+
+struct Point2D {
+	double x, y;
 };
 
 /// Wrapper for slightly more semantic code when writing SVGs
@@ -281,16 +277,12 @@ public:
 		return raw(" ", name, "=\"").write(args...).raw("\"");
 	}
 	
-	Bounds clip() {
-		return clipStack.back();
-	}
-	SvgWriter & pushClip(Bounds b) {
-		if (clipStack.size()) b.shrinkTo(clipStack.back());
-		clipStack.push_back(b);
+	SvgWriter & pushClip(Bounds b, double dataCheckPadding) {
+		clipStack.push_back(b.pad(dataCheckPadding));
 
 		long clipId = idCounter++;
 		tag("clipPath").attr("id", "clip", clipId);
-		rect(b.left, b.top, b.right, b.bottom);
+		rect(b.left, b.top, b.width(), b.height());
 		raw("</clipPath>");
 		tag("g").attr("clip-path", "url(#clip", clipId, ")");
 		return *this;
@@ -335,6 +327,34 @@ public:
 	}
 	Tag rect(double x, double y, double w, double h) {
 		return tag("rect", true).attr("x", x).attr("y", y).attr("width", w).attr("height", h);
+	}
+	
+	char streak = 0; // Tracks streaks of points which are outside the clip
+	Point2D prevPoint = {0, 0};
+	void startPath() {
+		streak = 0;
+	}
+	void addPoint(double x, double y) {
+		auto clip = clipStack.back();
+		/// Bitmask indicating which direction(s) the point is outside the bounds
+		char mask = (clip.left > x)
+			| (2*(clip.right < x))
+			| (4*(clip.top > y))
+			| (8*(clip.bottom < y));
+		char prevStreak = streak;
+		streak &= mask;
+		if (!streak) {
+			if (prevStreak) { // we broke the streak - draw the last in-streak point
+				if (!std::isnan(prevPoint.x) && !std::isnan(prevPoint.y)) {
+					raw(" ", prevPoint.x, " ", prevPoint.y);
+				}
+			}
+			if (!std::isnan(x) && !std::isnan(y)) {
+				raw(" ", x, " ", y);
+			}
+			streak = mask;
+		}
+		prevPoint = {x, y};
 	}
 };
 
@@ -419,11 +439,7 @@ public:
 		this->layout(style);
 
 		// Add padding
-		auto bounds = this->bounds;
-		bounds.left -= style.padding;
-		bounds.right += style.padding;
-		bounds.top -= style.padding;
-		bounds.bottom += style.padding;
+		auto bounds = this->bounds.pad(style.padding);
 		
 		SvgWriter svg(o, bounds);
 		svg.raw("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
@@ -661,10 +677,6 @@ public:
 	}
 };
 
-struct Point2D {
-	double x, y;
-};
-
 class TextLabel : public SvgDrawable {
 	double textWidth = 0;
 	void write(SvgWriter &svg) {
@@ -886,56 +898,36 @@ public:
 	}
 	
 	void writeData(SvgWriter &svg, const PlotStyle &style) override {
-		char streak = 0;
-		Point2D prevPoint = {std::nan(""), std::nan("")};
-		auto addPoint = [&](double x, double y) {
-			char mask = svg.clip().outside(x, y, style.lineWidth);
-			char prevStreak = streak;
-			streak &= mask;
-			if (!streak) {
-				if (prevStreak) { // we broke the streak - draw the last in-streak point
-					if (!std::isnan(prevPoint.x) && !std::isnan(prevPoint.y)) {
-						svg.raw(" ", prevPoint.x, " ", prevPoint.y);
-					}
-				}
-				if (!std::isnan(x) && !std::isnan(y)) {
-					svg.raw(" ", x, " ", y);
-				}
-				streak = mask;
-			}
-			prevPoint = {x, y};
-		};
-
 		if (_drawFill) {
 			svg.raw("<path")
 				.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
 			svg.raw(" d=\"M");
+			svg.startPath();
 			for (auto &p : points) {
-				addPoint(axisX.map(p.x), axisY.map(p.y));
+				svg.addPoint(axisX.map(p.x), axisY.map(p.y));
 			}
 			if (fillToLine) {
 				auto &otherPoints = fillToLine->points;
-				for (int i = otherPoints.size() - 1; i >= 0; --i) {
-					auto &p = otherPoints[i];
-					addPoint(axisX.map(p.x), axisY.map(p.y));
+				for (auto it = otherPoints.rbegin(); it != otherPoints.rend(); ++it) {
+					svg.addPoint(axisX.map(it->x), axisY.map(it->y));
 				}
 			} else if (hasFillToX) {
-				addPoint(axisX.map(fillToPoint.x), axisY.map(points.back().y));
-				addPoint(axisX.map(fillToPoint.x), axisY.map(points[0].y));
+				svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points.back().y));
+				svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points[0].y));
 			} else if (hasFillToY) {
-				addPoint(axisX.map(points.back().x), axisY.map(fillToPoint.y));
-				addPoint(axisX.map(points[0].x), axisY.map(fillToPoint.y));
+				svg.addPoint(axisX.map(points.back().x), axisY.map(fillToPoint.y));
+				svg.addPoint(axisX.map(points[0].x), axisY.map(fillToPoint.y));
 			}
 			svg.raw("\"/>");
 		}
 
-		streak = 0;
 		if (_drawLine) {
 			svg.raw("<path")
 				.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), " ", style.dashClass(styleIndex));
 			svg.raw(" d=\"M");
+			svg.startPath();
 			for (auto &p : points) {
-				addPoint(axisX.map(p.x), axisY.map(p.y));
+				svg.addPoint(axisX.map(p.x), axisY.map(p.y));
 			}
 			svg.raw("\"/>");
 		}
@@ -955,8 +947,6 @@ public:
 	Plot2D(Axis x, Axis y) : x(x), y(y) {}
 	
 	void writeData(SvgWriter &svg, const PlotStyle &style) override {
-		double padding = style.lineWidth*0.5;
-
 		svg.rect(x.drawMin(), y.drawMin(), x.drawSize(), y.drawSize())
 			.attr("class", "svg-plot-axis");
 		for (auto &t : x.tickList) {
@@ -979,7 +969,8 @@ public:
 			}
 		}
 
-		svg.pushClip({x.drawMin() - padding, x.drawSize() + padding*2, y.drawMin() - padding, y.drawSize() + padding*2});
+		Bounds clip(x.drawMin(), x.drawMin() + x.drawSize(), y.drawMin(), y.drawMin() + y.drawSize());
+		svg.pushClip(clip.pad(style.lineWidth*0.5), style.lineWidth);
 		SvgDrawable::writeData(svg, style);
 		svg.popClip();
 	}

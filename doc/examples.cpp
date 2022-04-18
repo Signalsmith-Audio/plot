@@ -97,7 +97,7 @@ signalsmith::plot::PlotStyle customStyle() {
 	signalsmith::plot::PlotStyle style;
 	style.lineWidth = 2;
 	style.valueSize = 9;
-	style.textAspect = 1.1;
+	style.fontAspectRatio = 1.1;
 	style.fillOpacity = 0.6;
 	style.tickH = style.tickV = 0;
 	

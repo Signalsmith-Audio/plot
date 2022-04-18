@@ -41,16 +41,15 @@ static double estimateUtf8Width(const char *utf8Str);
 class PlotStyle {
 public:
 	double padding = 10;
-	double labelSize = 12;
-	double valueSize = 10;
 	double lineWidth = 1.5;
-	double fillOpacity = 0.25;
-	double hatchWidth = 1;
-	double hatchSpacing = 3;
-	// Use this scale the text-size estimates if you use a particularly wide font
-	double textAspect = 1;
 	double tickH = 4, tickV = 5;
+	// Text
+	double labelSize = 12, valueSize = 10;
+	double fontAspectRatio = 1; // scales size estimates, if using a particularly wide font
 	double textPadding = 5;
+	// Fills
+	double fillOpacity = 0.25;
+	double hatchWidth = 1, hatchSpacing = 3;
 
 	std::string cssPrefix = "", cssSuffix = "";
 	std::vector<std::string> colours = {"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
@@ -149,7 +148,6 @@ public:
 				stroke: rgba(255,255,255,0.7);
 				stroke-width: 2px;
 				paint-order: stroke fill;
-
 				text-anchor: middle;
 				dominant-baseline: central;
 				alignment-baseline: baseline;
@@ -483,18 +481,19 @@ public:
 		std::stringstream cssStream;
 		style.css(cssStream);
 		std::string css = cssStream.str();
-		const char *c = css.c_str();
-		// Strip tabs and newlines;
-		while (*c) {
-			if (*c != '\t' && *c != '\n') {
-				// skip space before {
-				if (*c != ' ' || *(c + 1) != '{') {
-					o << (*c);
-				}
+		const char *cPtr = css.c_str();
+		// Strip whitespace that doesn't appear between letters/numbers
+		bool letter = false, letterThenWhitespace = false;
+		while (*cPtr) {
+			char c = *(cPtr++);
+			if (c == '\t' || c == '\n' || c == ' ') {
+				letterThenWhitespace = letter;
+			} else {
+				letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.';
+				if (letterThenWhitespace && letter) o << ' ';
+				letterThenWhitespace = false;
+				o << c;
 			}
-			// skip space after :
-			if ((*c == ':' || *c == ',') && *(c + 1) == ' ') ++c;
-			++c;
 		}
 		svg.raw("</style></svg>");
 	}
@@ -523,9 +522,7 @@ struct Tick {
 
 	template<typename T>
 	Tick(T v) : value(double(v)) {
-		std::stringstream str;
-		str << value;
-		name = str.str();
+		name = (std::stringstream() << value).str();
 	}
 };
 
@@ -713,7 +710,7 @@ protected:
 		double fontSize = isValue ? style.valueSize : style.labelSize;
 
 		// Assume all text/labels are UTF-8
-		textWidth = estimateUtf8Width(text.c_str())*fontSize*style.textAspect;
+		textWidth = estimateUtf8Width(text.c_str())*fontSize*style.fontAspectRatio;
 
 		if (vertical) {
 			this->bounds = {x - fontSize*0.5, x + fontSize*0.5, y - textWidth*(alignment - 1)*0.5, y - textWidth*(alignment + 1)*0.5};
@@ -969,7 +966,7 @@ public:
 			}
 		}
 
-		Bounds clip(x.drawMin(), x.drawMin() + x.drawSize(), y.drawMin(), y.drawMin() + y.drawSize());
+		Bounds clip(x.drawMin(), x.drawMax(), y.drawMin(), y.drawMax());
 		svg.pushClip(clip.pad(style.lineWidth*0.5), style.lineWidth);
 		SvgDrawable::writeData(svg, style);
 		svg.popClip();
@@ -1014,7 +1011,7 @@ public:
 		}
 		if (x.label().size()) {
 			double midX = (x.drawMax() + x.drawMin())*0.5;
-			auto *label = new TextLabel({midX, screenY + (style.labelSize + style.valueSize)*0.5}, 0, x.label(), "svg-plot-label", false, true);
+			auto *label = new TextLabel({midX, screenY + style.labelSize*0.5 + style.textPadding}, 0, x.label(), "svg-plot-label", false, true);
 			this->addLayoutChild(label);
 		}
 		double screenX = x.drawMin() - th - style.textPadding;

@@ -234,9 +234,9 @@ struct Bounds {
 class SvgWriter {
 	std::ostream &output;
 	std::vector<Bounds> clipStack;
-	long clipId;
+	long idCounter = 0;
 public:
-	SvgWriter(std::ostream &output, Bounds bounds) : output(output), clipStack({bounds}), clipId(rand()) {}
+	SvgWriter(std::ostream &output, Bounds bounds) : output(output), clipStack({bounds}) {}
 
 	SvgWriter & raw() {
 		return *this;
@@ -288,11 +288,11 @@ public:
 		if (clipStack.size()) b.shrinkTo(clipStack.back());
 		clipStack.push_back(b);
 
-		long cId = ++clipId;
-		tag("clipPath").attr("id", "clip", cId);
+		long clipId = idCounter++;
+		tag("clipPath").attr("id", "clip", clipId);
 		rect(b.left, b.top, b.right, b.bottom);
 		raw("</clipPath>");
-		tag("g").attr("clip-path", "url(#clip", cId, ")");
+		tag("g").attr("clip-path", "url(#clip", clipId, ")");
 		return *this;
 	}
 	SvgWriter & popClip() {
@@ -351,7 +351,7 @@ protected:
 	Bounds bounds;
 	
 	void invalidateLayout() {
-		hasLayout = false;
+		hasLayout = bounds.set = false;
 		for (auto &c : children) c->invalidateLayout();
 		layoutChildren.resize(0);
 	}
@@ -360,14 +360,12 @@ protected:
 	}
 	virtual void layout(const PlotStyle &style) {
 		hasLayout = true;
-		auto processChild = [&](std::unique_ptr<SvgDrawable> &c) {
-			c->layoutIfNeeded(style);
+		auto processChild = [&](std::unique_ptr<SvgDrawable> &child) {
+			child->layoutIfNeeded(style);
 			if (bounds.set) {
-				if (c->bounds.set) {
-					bounds.expandTo(c->bounds);
-				}
+				if (child->bounds.set) bounds.expandTo(child->bounds);
 			} else {
-				bounds = c->bounds;
+				bounds = child->bounds;
 			}
 		};
 		for (auto &c : layoutChildren) processChild(c);

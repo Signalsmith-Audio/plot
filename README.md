@@ -43,7 +43,7 @@ Here's a minimal example, which sets up a 2D plot, adds some grid-lines/ticks:
 signalsmith::plot::Plot2D plot;
 
 // Place the grid/ticks
-plot.x.major(0, 10).tick(5).minor(3.5);
+plot.x.majors(0, 10).tick(5).minor(3.5);
 ploy.y.major(0);
 
 // If you don't set the scale, it will guess from data/ticks
@@ -58,6 +58,8 @@ for (auto &p : points) {
 	// Add points as x/y pairs
 	line.add(p.x, p.y);
 }
+// or from array (using `.size()` if not specified)
+line.addArray(xArr, yArr);
 
 plot.write("example.svg");
 ```

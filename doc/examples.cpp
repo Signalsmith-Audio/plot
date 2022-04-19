@@ -93,7 +93,7 @@ int main() {
 	}
 
 	{ // Multiple axes
-		signalsmith::plot::Plot2D plot(200, 200);
+		signalsmith::plot::Plot2D plot(200, 150);
 		// Two axes, which occupy the top/bottom halves of the plot
 		auto &yUp = plot.newY(0.5, 1);
 		auto &yDown = plot.newY(0.5, 0).linear(0, 4);
@@ -125,10 +125,10 @@ int main() {
 		// Label at a given X position
 		compositeLine.label(80, "estimate");
 
-		yUp.linear(0, 230).major(0).minors(100, 200).label("bink", upLine.styleIndex);
-		yDown.linear(0, 3).minors(1, 2, 3).label("tork", downLine.styleIndex);
+		yUp.linear(0, 230).major(0).ticks(100, 200).label("bink", upLine.styleIndex);
+		yDown.linear(0, 3).ticks(1, 2, 3).label("tork", downLine.styleIndex);
 		yComposite.linear(-100, 100).ticks(-100, 0).tick(100, "+100").label("scrimbles (net)");
-		plot.x.major(0).minors(50, 100).label("day");
+		plot.x.major(0).minor(100).label("day");
 
 		plot.write("multiple-axes.svg");
 	}

@@ -4,7 +4,7 @@ examples: out/examples
 out/examples: *.cpp ../*.h
 	mkdir -p out
 	g++ -std=c++11 -g -O3 \
- 		-Wall -Wextra -Wfatal-errors -Wpedantic -pedantic-errors \
+		-Wall -Wextra -Wfatal-errors -Wpedantic -pedantic-errors \
 		examples.cpp -o out/examples
 
 clean:

@@ -1,4 +1,4 @@
-/** Signalsmith's Basic C++ Plots
+/** Signalsmith's Basic C++ Plots - https://signalsmith-audio.co.uk/code/plot/
 @copyright Licensed as 0BSD.  If you need anything else, get in touch. */
 
 #ifndef SIGNALSMITH_PLOT_H
@@ -8,12 +8,8 @@
 #include <memory>
 #include <functional>
 #include <vector>
-#include <array>
 #include <cmath>
 #include <sstream>
-
-//#include <iostream>
-//#define LOG_EXPR(x) std::cout << #x << " = " << (x) << "\n";
 
 namespace signalsmith { namespace plot {
 
@@ -35,8 +31,9 @@ namespace signalsmith { namespace plot {
 static double estimateUtf8Width(const char *utf8Str);
 
 /** Plotting style, used for both layout and SVG rendering.
-	CSS is written inline in the SVG, generated from various sizes and `.colours`/`.dashes`/`.hatches`, plus `.cssPrefix`/`.cssSuffix`.
+	Colour/dash/hatch styles are defined as CSS classes, assigned to elements based on their integer style index.  CSS is written inline in the SVG, and can be extended/overridden with `.cssPrefix`/`.cssSuffix`.
  		\image html custom-2d.svg
+	It generates CSS classes from `.colours` (`svg-plot-sN`/`svg-plot-fN`/`svg-plot-tN` for stroke/fill/text), `.dashes` (`svg-plot-dN`) and `.hatches` (`svg-plot-hN`), where `N` is the index - e.g. there are six colours by default, generating `svg-plot-s0` to `svg-plot-s5`.
 */
 class PlotStyle {
 public:
@@ -45,7 +42,7 @@ public:
 	double tickH = 4, tickV = 5;
 	// Text
 	double labelSize = 12, valueSize = 10;
-	double fontAspectRatio = 1; // scales size estimates, if using a particularly wide font
+	double fontAspectRatio = 1; /// scales size estimates, if using a particularly wide font
 	double textPadding = 5;
 	// Fills
 	double fillOpacity = 0.25;
@@ -104,6 +101,7 @@ public:
 		o << R"CSS(
 			.svg-plot {
 				stroke-linecap: butt;
+				stroke-linejoin: round;
 			}
 			.svg-plot-bg {
 				fill: none;
@@ -111,7 +109,7 @@ public:
 			}
 			.svg-plot-axis {
 				stroke: none;
-				fill: rgba(255,255,255,0.85);
+				fill: #FFFFFFD9;
 			}
 			.svg-plot-line {
 				stroke: blue;
@@ -130,7 +128,7 @@ public:
 				fill: none;
 			}
 			.svg-plot-minor {
-				stroke: rgba(0,0,0,0.3);
+				stroke: #0000004D;
 				stroke-width: 0.5px;
 				stroke-dasharray: 0.5 1.5;
 				stroke-linecap: round;
@@ -145,7 +143,7 @@ public:
 			.svg-plot-value, .svg-plot-label {
 				font-family: Arial,sans-serif;
 				fill: #000;
-				stroke: rgba(255,255,255,0.7);
+				stroke: #FFFFFF80;
 				stroke-width: 2px;
 				paint-order: stroke fill;
 				text-anchor: middle;
@@ -215,8 +213,11 @@ struct Bounds {
 		bottom = std::max(bottom, other.bottom);
 		return *this;
 	}
+	Bounds pad(double hPad, double vPad) {
+		return {left - hPad, right + hPad, top - vPad, bottom + vPad};
+	}
 	Bounds pad(double padding) {
-		return {left - padding, right + padding, top - padding, bottom + padding};
+		return pad(padding, padding);
 	}
 };
 
@@ -364,7 +365,7 @@ public:
 
 /** Any drawable element.
  	
-	Each element has two layers: data and labels.  Child elements are drawn in reverse order, so the earliest ones are drawn on top.
+	Each element can draw to three layers: fill, stroke and label.  Child elements are drawn in reverse order, so the earliest ones are drawn on top of each layer.
 	
 	Copy/assign is disabled, to prevent accidental copying when you should be holding a reference.
 */
@@ -414,7 +415,6 @@ public:
 		for (int i = layoutChildren.size() - 1; i >= 0; --i) {
 			layoutChildren[i]->writeData(svg, style);
 		}
-		// Write in reverse order
 		for (int i = children.size() - 1; i >= 0; --i) {
 			children[i]->writeData(svg, style);
 		}
@@ -423,7 +423,6 @@ public:
 		for (int i = layoutChildren.size() - 1; i >= 0; --i) {
 			layoutChildren[i]->writeLabel(svg, style);
 		}
-		// Write in reverse order
 		for (int i = children.size() - 1; i >= 0; --i) {
 			children[i]->writeLabel(svg, style);
 		}
@@ -935,7 +934,6 @@ public:
 			}
 			svg.raw("\"/>");
 		}
-
 		if (_drawLine) {
 			svg.raw("<path")
 				.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), " ", style.dashClass(styleIndex));
@@ -946,7 +944,6 @@ public:
 			}
 			svg.raw("\"/>");
 		}
-
 		SvgDrawable::writeData(svg, style);
 	}
 };
@@ -962,7 +959,7 @@ public:
 		xAxes.emplace_back(x);
 		return *x;
 	}
-	/// Creates an Y axis, covering some portion of the bottom/top side
+	/// Creates a Y axis, covering some portion of the bottom/top side
 	Axis & newY(double lowRatio=0, double highRatio=1) {
 		Axis *y = new Axis(size.bottom - lowRatio*size.height(), size.bottom - highRatio*size.height());
 		yAxes.emplace_back(y);
@@ -1001,7 +998,6 @@ public:
 				}
 			}
 		}
-
 		svg.pushClip(size.pad(style.lineWidth*0.5), style.lineWidth);
 		SvgDrawable::writeData(svg, style);
 		svg.popClip();
@@ -1088,13 +1084,7 @@ public:
 			}
 		}
 
-		this->bounds = {
-			size.left - th,
-			size.right + th,
-			size.top - tv,
-			size.bottom + tv
-		};
-
+		this->bounds = size.pad(th, tv);
 		SvgDrawable::layout(style);
 	};
 	

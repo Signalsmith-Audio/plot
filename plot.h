@@ -41,7 +41,7 @@ static double estimateUtf8Width(const char *utf8Str);
 class PlotStyle {
 public:
 	double padding = 10;
-	double lineWidth = 1.5;
+	double lineWidth = 1.5, precision = 100;
 	double tickH = 4, tickV = 5;
 	// Text
 	double labelSize = 12, valueSize = 10;
@@ -229,8 +229,9 @@ class SvgWriter {
 	std::ostream &output;
 	std::vector<Bounds> clipStack;
 	long idCounter = 0;
+	double precision, invPrecision;
 public:
-	SvgWriter(std::ostream &output, Bounds bounds) : output(output), clipStack({bounds}) {}
+	SvgWriter(std::ostream &output, Bounds bounds, double precision) : output(output), clipStack({bounds}), precision(precision), invPrecision(1.0/precision) {}
 
 	SvgWriter & raw() {
 		return *this;
@@ -328,11 +329,16 @@ public:
 	}
 	
 	char streak = 0; // Tracks streaks of points which are outside the clip
-	Point2D prevPoint = {0, 0};
+	Point2D prevPoint;
 	void startPath() {
 		streak = 0;
+		prevPoint = {std::nan(""), std::nan("")};
 	}
 	void addPoint(double x, double y) {
+		x = std::round(x*precision)*invPrecision;
+		y = std::round(y*precision)*invPrecision;
+		if (x == prevPoint.x && y == prevPoint.y) return;
+
 		auto clip = clipStack.back();
 		/// Bitmask indicating which direction(s) the point is outside the bounds
 		char mask = (clip.left > x)
@@ -439,7 +445,7 @@ public:
 		// Add padding
 		auto bounds = this->bounds.pad(style.padding);
 		
-		SvgWriter svg(o, bounds);
+		SvgWriter svg(o, bounds, style.precision);
 		svg.raw("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
 		svg.tag("svg").attr("version", "1.1").attr("class", "svg-plot")
 			.attr("xmlns", "http://www.w3.org/2000/svg")

@@ -568,6 +568,7 @@ public:
 		autoScale = true;
 		autoLabel = true;
 	}
+	explicit Axis(const Axis &other) = default;
 
 	/// Register a value for the auto-scale
 	void autoValue(double v) {
@@ -588,7 +589,14 @@ public:
 	}
 	/// Prevent auto-labelling
 	Axis & blank() {
+		tickList.clear();
 		autoLabel = false;
+		return *this;
+	}
+	/// Whether the axis should draw on the non-default side (e.g. right/top)
+	bool flipped = false;
+	Axis & flip(bool flip=true) {
+		flipped = flip;
 		return *this;
 	}
 	
@@ -771,11 +779,11 @@ public:
 	/// @{
 	///@name Draw config
 
-	Line2D & drawLine(bool draw) {
+	Line2D & drawLine(bool draw=true) {
 		_drawLine = draw;
 		return *this;
 	}
-	Line2D & drawFill(bool draw) {
+	Line2D & drawFill(bool draw=true) {
 		_drawFill = draw;
 		return *this;
 	}
@@ -912,7 +920,7 @@ public:
 			if (fillToLine) {
 				auto &otherPoints = fillToLine->points;
 				for (auto it = otherPoints.rbegin(); it != otherPoints.rend(); ++it) {
-					svg.addPoint(axisX.map(it->x), axisY.map(it->y));
+					svg.addPoint(fillToLine->axisX.map(it->x), fillToLine->axisY.map(it->y));
 				}
 			} else if (hasFillToX) {
 				svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points.back().y));
@@ -940,40 +948,57 @@ public:
 };
 
 class Plot2D : public SvgFileDrawable {
+	std::vector<std::unique_ptr<Axis>> xAxes, yAxes;
+	Bounds size;
 public:
-	Axis x, y;
+	Axis &x, &y;
+	/// Creates an X axis, covering some portion of the left/right side
+	Axis & newX(double lowRatio=0, double highRatio=1) {
+		Axis *x = new Axis(size.left + lowRatio*size.width(), size.left + highRatio*size.width());
+		xAxes.emplace_back(x);
+		return *x;
+	}
+	/// Creates an Y axis, covering some portion of the bottom/top side
+	Axis & newY(double lowRatio=0, double highRatio=1) {
+		Axis *y = new Axis(size.bottom - lowRatio*size.height(), size.bottom - highRatio*size.height());
+		yAxes.emplace_back(y);
+		return *y;
+	}
 	/// Style for the next auto-styled element
 	PlotStyle::Counter styleCounter;
 
 	Plot2D() : Plot2D(240, 130) {}
 	Plot2D(double width, double height) : Plot2D({0, width}, {height, 0}) {}
-	Plot2D(Axis x, Axis y) : x(x), y(y) {}
+	Plot2D(Axis ax, Axis ay) : size(ax.drawMin(), ax.drawMax(), ay.drawMin(), ay.drawMax()), x(*(new Axis(ax))), y(*(new Axis(ay))) {
+		xAxes.emplace_back(&x); // created above, but we take ownership here
+		yAxes.emplace_back(&y);
+	}
 	
 	void writeData(SvgWriter &svg, const PlotStyle &style) override {
-		svg.rect(x.drawMin(), y.drawMin(), x.drawSize(), y.drawSize())
+		svg.rect(size.left, size.top, size.width(), size.height())
 			.attr("class", "svg-plot-axis");
-		for (auto &t : x.tickList) {
-			if (t.strength != Tick::Strength::tick) {
-				double screenX = x.map(t.value);
-				bool isMajor = (t.strength == Tick::Strength::major);
-				bool isLeftBorder = std::abs(screenX - x.drawMin()) < 0.01; // 1% of a pixel is close enough
-				double extraTop = (isMajor && isLeftBorder && t.name.size()) ? style.tickH : 0; // Extend using horizontal tick even though it's vertical
-				
-				svg.line(screenX, y.drawMin() - extraTop, screenX, y.drawMax())
-					.attr("class", "svg-plot-", isMajor ? "major" : "minor");
+		for (auto &x : xAxes) {
+			for (auto &t : x->tickList) {
+				if (t.strength != Tick::Strength::tick) {
+					double screenX = x->map(t.value);
+					bool isMajor = (t.strength == Tick::Strength::major);
+					svg.line(screenX, size.top, screenX, size.bottom)
+						.attr("class", "svg-plot-", isMajor ? "major" : "minor");
+				}
 			}
 		}
-		for (auto &t : y.tickList) {
-			if (t.strength != Tick::Strength::tick) {
-				double screenY = y.map(t.value);
-				bool isMajor = (t.strength == Tick::Strength::major);
-				svg.line(x.drawMin(), screenY, x.drawMax(), screenY)
-					.attr("class", "svg-plot-", isMajor ? "major" : "minor");
+		for (auto &y : yAxes) {
+			for (auto &t : y->tickList) {
+				if (t.strength != Tick::Strength::tick) {
+					double screenY = y->map(t.value);
+					bool isMajor = (t.strength == Tick::Strength::major);
+					svg.line(size.left, screenY, size.right, screenY)
+						.attr("class", "svg-plot-", isMajor ? "major" : "minor");
+				}
 			}
 		}
 
-		Bounds clip(x.drawMin(), x.drawMax(), y.drawMin(), y.drawMax());
-		svg.pushClip(clip.pad(style.lineWidth*0.5), style.lineWidth);
+		svg.pushClip(size.pad(style.lineWidth*0.5), style.lineWidth);
 		SvgDrawable::writeData(svg, style);
 		svg.popClip();
 	}
@@ -982,18 +1007,26 @@ public:
 		svg.raw("<g>");
 		SvgDrawable::writeLabel(svg, style);
 
-		for (auto &t : x.tickList) {
-			double screenX = x.map(t.value);
-			if (t.name.size() && style.tickV != 0) {
-				svg.line(screenX, y.drawMax(), screenX, y.drawMax() + style.tickV)
-					.attr("class", "svg-plot-tick");
+		for (auto &x : xAxes) {
+			double fromY = x->flipped ? size.top : size.bottom;
+			double toY = fromY + (x->flipped ? -style.tickV : style.tickV);
+			for (auto &t : x->tickList) {
+				double screenX = x->map(t.value);
+				if (t.name.size() && style.tickV != 0) {
+					svg.line(screenX, fromY, screenX, toY)
+						.attr("class", "svg-plot-tick");
+				}
 			}
 		}
-		for (auto &t : y.tickList) {
-			if (t.name.size() && style.tickH != 0) {
-				double screenY = y.map(t.value);
-				svg.line(x.drawMin() - style.tickH, screenY, x.drawMin(), screenY)
-					.attr("class", "svg-plot-tick");
+		for (auto &y : yAxes) {
+			double fromX = y->flipped ? size.right : size.left;
+			double toX = fromX + (y->flipped ? style.tickH : -style.tickV);
+			for (auto &t : y->tickList) {
+				if (t.name.size() && style.tickH != 0) {
+					double screenY = y->map(t.value);
+					svg.line(fromX, screenY, toX, screenY)
+						.attr("class", "svg-plot-tick");
+				}
 			}
 		}
 		svg.raw("</g>");
@@ -1001,65 +1034,85 @@ public:
 
 	void layout(const PlotStyle &style) override {
 		// Auto-scale axes if needed
-		x.autoSetup();
-		y.autoSetup();
+		for (auto &x : xAxes) x->autoSetup();
+		for (auto &y : yAxes) y->autoSetup();
 
 		double tv = std::max(style.tickV, 0.0), th = std::max(style.tickH, 0.0);
 
 		// Add labels for axes
-		double screenY = y.drawMax() + tv + style.valueSize*0.5 + style.textPadding;
-		for (auto &t : x.tickList) {
-			if (t.name.size()) {
-				double screenX = x.map(t.value);
-				auto *label = new TextLabel({screenX, screenY}, 0, t.name, "svg-plot-value", false, true);
+		for (auto &x : xAxes) {
+			double alignment = (x->flipped ? -1 : 1), hasValues = x->tickList.size() ? 1 : 0;
+			double screenY = (x->flipped ? size.top : size.bottom) + alignment*(tv + hasValues*(style.valueSize*0.5 + style.textPadding));
+			for (auto &t : x->tickList) {
+				if (t.name.size()) {
+					double screenX = x->map(t.value);
+					auto *label = new TextLabel({screenX, screenY}, 0, t.name, "svg-plot-value", false, true);
+					this->addLayoutChild(label);
+				}
+			}
+			if (x->label().size()) {
+				double labelY = screenY + alignment*((style.labelSize + hasValues*style.valueSize)*0.5 + style.textPadding);
+				double midX = (x->drawMax() + x->drawMin())*0.5;
+				auto *label = new TextLabel({midX, labelY}, 0, x->label(), "svg-plot-label", false, true);
 				this->addLayoutChild(label);
 			}
 		}
-		if (x.label().size()) {
-			double midX = (x.drawMax() + x.drawMin())*0.5;
-			auto *label = new TextLabel({midX, screenY + style.labelSize*0.5 + style.textPadding}, 0, x.label(), "svg-plot-label", false, true);
-			this->addLayoutChild(label);
-		}
-		double screenX = x.drawMin() - th - style.textPadding;
-		double longestLabel = 0;
-		for (auto &t : y.tickList) {
-			if (t.name.size()) {
-				double screenY = y.map(t.value);
-				auto *label = new TextLabel({screenX, screenY}, -1, t.name, "svg-plot-value", false, true);
-				longestLabel = std::max(longestLabel, estimateUtf8Width(t.name.c_str()));
-				this->addLayoutChild(label);
+		double longestLabelLeft = 0, longestLabelRight = 0;
+		for (auto &y : yAxes) {
+			double alignment = (y->flipped ? 1 : -1);
+			double screenX = (y->flipped ? size.right : size.left) + alignment*(th + style.textPadding);
+			for (auto &t : y->tickList) {
+				if (t.name.size()) {
+					double screenY = y->map(t.value);
+					auto *label = new TextLabel({screenX, screenY}, alignment, t.name, "svg-plot-value", false, true);
+					this->addLayoutChild(label);
+
+					double &longestLabel = y->flipped ? longestLabelRight : longestLabelLeft;
+					longestLabel = std::max(longestLabel, estimateUtf8Width(t.name.c_str()));
+				}
 			}
 		}
-		if (y.label().size()) {
-			double midY = (y.drawMax() + y.drawMin())*0.5;
-			auto *label = new TextLabel({screenX - style.textPadding*1.5 - longestLabel*style.valueSize, midY}, 0, y.label(), "svg-plot-label", true, true);
-			this->addLayoutChild(label);
+		for (auto &y : yAxes) {
+			double alignment = (y->flipped ? 1 : -1);
+			double screenX = (y->flipped ? size.right : size.left) + alignment*(th + style.textPadding);
+			if (y->label().size()) {
+				double longestLabel = y->flipped ? longestLabelRight : longestLabelLeft;
+				double labelX = screenX + alignment*(style.textPadding*1.5 + longestLabel*style.valueSize);
+				double midY = (y->drawMax() + y->drawMin())*0.5;
+				auto *label = new TextLabel({labelX, midY}, 0, y->label(), "svg-plot-label", true, true);
+				this->addLayoutChild(label);
+			}
 		}
 
 		this->bounds = {
-			x.drawMin() - th,
-			x.drawMax() + th,
-			y.drawMin() - tv,
-			y.drawMax() + tv
+			size.left - th,
+			size.right + th,
+			size.top - tv,
+			size.bottom + tv
 		};
 
 		SvgDrawable::layout(style);
 	};
 	
-	Line2D & line(PlotStyle::Counter styleIndex) {
-		Line2D *line = new Line2D(this->x, this->y, styleIndex);
+	Line2D & line(Axis &x, Axis &y, PlotStyle::Counter styleIndex) {
+		Line2D *line = new Line2D(x, y, styleIndex);
 		this->addChild(line);
 		return *line;
+	}
+	Line2D & line(Axis &x, Axis &y) {
+		return line(x, y, styleCounter.bump());
+	}
+	Line2D & line(PlotStyle::Counter styleIndex) {
+		return line(this->x, this->y, styleIndex);
 	}
 	Line2D & line() {
 		return line(styleCounter.bump());
 	}
 
-	Line2D & fill(PlotStyle::Counter styleIndex) {
-		return line(styleIndex).drawLine(false).drawFill(true);
-	}
-	Line2D & fill() {
-		return fill(styleCounter.bump());
+	/// Convenience method, returns a line set to only fill.
+	template<class ...Args>
+	Line2D & fill(Args &&...args) {
+		return line(args...).drawLine(false).drawFill(true);
 	}
 };
 

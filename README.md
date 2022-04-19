@@ -16,11 +16,12 @@ It's maintained mostly for internal Signalsmith Audio use, so I'm adding feature
 * values labelled with three levels: major/minor/tick
 	* no explicit axis-lines, use major gridlines instead
 * attempts not to draw out-of-view data
+* each edge can have multiple partial axes
 
 ### Current limitations
 
-* only 2D axes supported
-* one axis per plot
+* only 2D plots supported
+* one plot per figure
 * no automatic label placement or de-collision
 * text lengths are heuristically estimated
 
@@ -69,6 +70,7 @@ See [examples.cpp](doc/examples.cpp) for code examples.  Here are the images gen
 ![Custom plot style](examples/custom-2d.svg)
 ![Style sequence](examples/style-sequence.svg)
 ![Intersecting circles](examples/filled-circles.svg)
+![Multiple axes](examples/multiple-axes.svg)
 
 ### API principles
 

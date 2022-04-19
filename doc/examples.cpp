@@ -26,7 +26,7 @@ int main() {
 	}
 	
 	{ // Demonstrating default colour/dash sequence
-		signalsmith::plot::Plot2D plot(360, 80);
+		signalsmith::plot::Plot2D plot(320, 80);
 		
 		// Prevent it from adding default ticks
 		plot.y.blank();
@@ -90,6 +90,35 @@ int main() {
 		circle(0.5, 0.5, 2).drawFill(false).drawLine(true).label(0.5, -1.5, "outer boundary", 90);
 		
 		plot.write("filled-circles.svg");
+	}
+
+	{ // Multiple axes
+		signalsmith::plot::Plot2D plot(200, 200);
+		// Two axes, which occupy the top/bottom halves of the plot
+		auto &yUp = plot.newY(0.5, 1);
+		auto &yDown = plot.newY(0.5, 0).linear(0, 4);
+		plot.x.flip(); // Draws on the non-default side (top)
+		
+		// Assign line
+		auto &upLine = plot.line(plot.x, yUp).fillToY(0);
+		auto &downLine = plot.line(plot.x, yDown);
+		// Explicit style index
+		auto &downLine2 = plot.line(plot.x, yDown, downLine.styleIndex);
+		// Fills the space between two lines
+		downLine.fillTo(downLine2);
+		
+		std::vector<double> xPoints = {0, 20, 25, 55, 80, 100};
+		std::vector<double> upPoints = {100, 180, 150, 150, 220, 185};
+		std::vector<double> downPoints = {1, 2, 2, 1, 1, 3, 2};
+		std::vector<double> downPoints2 = {0, 0, 1, 0, 0, 1, 1};
+		upLine.addArray(xPoints, upPoints, xPoints.size()); // Can set explicit size if data doesn't have `.size()`
+		downLine.addArray(xPoints, downPoints); // Otherwise it can guess
+		downLine2.addArray(xPoints, downPoints2);
+		
+		yUp.linear(0, 230).major(0).minors(100, 200).label("bink");
+		yDown.linear(0, 3).minors(1, 2, 3).label("tork");
+		plot.x.major(0).minors(50, 100).label("day");
+		plot.write("multiple-axes.svg");
 	}
 }
 

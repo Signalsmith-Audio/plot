@@ -562,6 +562,8 @@ public:
 	double drawSize() const {
 		return std::abs(drawHigh - drawLow);
 	}
+	/// Not associated with a particular line by default, but can be
+	PlotStyle::Counter styleIndex = -1;
 
 	Axis(double drawLow, double drawHigh) : drawLow(drawLow), drawHigh(drawHigh) {
 		linear(0, 1);
@@ -600,8 +602,10 @@ public:
 		return *this;
 	}
 	
-	Axis & label(std::string l) {
+	/// Sets the label, and optionally style to match a particular line.
+	Axis & label(std::string l, PlotStyle::Counter index=-1) {
 		_label = l;
+		styleIndex = index;
 		return *this;
 	}
 	const std::string & label() {
@@ -1053,7 +1057,7 @@ public:
 			if (x->label().size()) {
 				double labelY = screenY + alignment*((style.labelSize + hasValues*style.valueSize)*0.5 + style.textPadding);
 				double midX = (x->drawMax() + x->drawMin())*0.5;
-				auto *label = new TextLabel({midX, labelY}, 0, x->label(), "svg-plot-label", false, true);
+				auto *label = new TextLabel({midX, labelY}, 0, x->label(), "svg-plot-label " + style.textClass(x->styleIndex), false, true);
 				this->addLayoutChild(label);
 			}
 		}
@@ -1079,7 +1083,7 @@ public:
 				double longestLabel = y->flipped ? longestLabelRight : longestLabelLeft;
 				double labelX = screenX + alignment*(style.textPadding*1.5 + longestLabel*style.valueSize);
 				double midY = (y->drawMax() + y->drawMin())*0.5;
-				auto *label = new TextLabel({labelX, midY}, 0, y->label(), "svg-plot-label", true, true);
+				auto *label = new TextLabel({labelX, midY}, 0, y->label(), "svg-plot-label " + style.textClass(y->styleIndex), true, true);
 				this->addLayoutChild(label);
 			}
 		}

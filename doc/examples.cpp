@@ -97,15 +97,20 @@ int main() {
 		// Two axes, which occupy the top/bottom halves of the plot
 		auto &yUp = plot.newY(0.5, 1);
 		auto &yDown = plot.newY(0.5, 0).linear(0, 4);
+		// Third axis on right-hand side
+		auto &yComposite = plot.newY().flip();
 		plot.x.flip(); // Draws on the non-default side (top)
+		
 		
 		// Assign line
 		auto &upLine = plot.line(plot.x, yUp).fillToY(0);
+		// Explicit axes
 		auto &downLine = plot.line(plot.x, yDown);
-		// Explicit style index
+		// Explicit style index as well (doesn't increment the default style counter)
 		auto &downLine2 = plot.line(plot.x, yDown, downLine.styleIndex);
-		// Fills the space between two lines
+		// Fill path returns back down the other line
 		downLine.fillTo(downLine2);
+		auto &compositeLine = plot.line(plot.x, yComposite);
 		
 		std::vector<double> xPoints = {0, 20, 25, 55, 80, 100};
 		std::vector<double> upPoints = {100, 180, 150, 150, 220, 185};
@@ -114,10 +119,17 @@ int main() {
 		upLine.addArray(xPoints, upPoints, xPoints.size()); // Can set explicit size if data doesn't have `.size()`
 		downLine.addArray(xPoints, downPoints); // Otherwise it can guess
 		downLine2.addArray(xPoints, downPoints2);
-		
-		yUp.linear(0, 230).major(0).minors(100, 200).label("bink");
-		yDown.linear(0, 3).minors(1, 2, 3).label("tork");
+		for (int i = 0; i < 6; ++i) {
+			compositeLine.add(xPoints[i], upPoints[i]*0.35 - (downPoints[i] + downPoints2[i])*25);
+		}
+		// Label at a given X position
+		compositeLine.label(80, "estimate");
+
+		yUp.linear(0, 230).major(0).minors(100, 200).label("bink", upLine.styleIndex);
+		yDown.linear(0, 3).minors(1, 2, 3).label("tork", downLine.styleIndex);
+		yComposite.linear(-100, 100).ticks(-100, 0).tick(100, "+100").label("scrimbles (net)");
 		plot.x.major(0).minors(50, 100).label("day");
+
 		plot.write("multiple-axes.svg");
 	}
 }

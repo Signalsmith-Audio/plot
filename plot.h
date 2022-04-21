@@ -48,6 +48,7 @@ public:
 	double fillOpacity = 0.25;
 	double hatchWidth = 1, hatchSpacing = 3;
 
+	std::string scriptHref = "", scriptSrc = "";
 	std::string cssPrefix = "", cssSuffix = "";
 	std::vector<std::string> colours = {"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
 	std::vector<std::vector<double>> dashes = {{}, {1.2, 1.2}, {2.8, 1.6}, {5, 4}, {4, 1, 1, 1, 1, 1}, {10, 3}, {4, 2, 1, 2}};
@@ -500,7 +501,10 @@ public:
 				o << c;
 			}
 		}
-		svg.raw("</style></svg>");
+		svg.raw("</style>");
+		if (style.scriptHref.size()) svg.tag("script", true).attr("href", style.scriptHref);
+		if (style.scriptSrc.size()) svg.raw("<script>").write(style.scriptSrc).raw("</script>");
+		svg.raw("</svg>");
 	}
 	void write(std::string svgFile, const PlotStyle &style) {
 		std::ofstream s(svgFile);

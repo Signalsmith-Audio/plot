@@ -45,7 +45,7 @@ public:
 	double fontAspectRatio = 1; /// scales size estimates, if using a particularly wide font
 	double textPadding = 5, lineHeight = 1.2;
 	// Fills
-	double fillOpacity = 0.25;
+	double fillOpacity = 0.3;
 	double hatchWidth = 1, hatchSpacing = 3;
 
 	std::string scriptHref = "", scriptSrc = "";
@@ -187,7 +187,7 @@ public:
 				o << ".svg-plot-h" << i << "{mask:url(#svg-plot-hatch" << i << ")}\n";
 			} else {
 				// Compensate for the fact that it's not hatched
-				o << ".svg-plot-h" << i << "{opacity:" << (fillOpacity*std::sqrt(hatchWidth/hatchSpacing)) << "}\n";
+				o << ".svg-plot-h" << i << "{opacity:" << (fillOpacity*(hatchWidth/hatchSpacing)) << "}\n";
 			}
 		}
 		for (size_t i = 0; i < hatches.size(); ++i) {
@@ -409,8 +409,9 @@ public:
 	SvgDrawable & operator =(const SvgDrawable &other) = delete;
 
 	Bounds layoutIfNeeded(const PlotStyle &style) {
-		return hasLayout ? bounds : this->layout(style);
-f	}
+		if (!hasLayout) this->layout(style);
+		return bounds;
+	}
 
 	/// Takes ownership of the child
 	void addChild(SvgDrawable *child) {
@@ -972,7 +973,7 @@ public:
 	Legend(SvgFileDrawable &ref, Bounds dataBounds, double rx, double ry) : ref(ref), dataBounds(dataBounds), rx(rx), ry(ry) {}
 	
 	void layout(const PlotStyle &style) override {
-		Bounds refBounds = ref.layoutIfNeeded(style);
+		Bounds refBounds = ref.layoutIfNeeded(style).pad(style.textPadding);
 		double exampleLineWidth = style.labelSize*1.5; // 1.5em
 		double longestLabel = 0;
 		for (auto &e : entries) {
@@ -1009,6 +1010,9 @@ public:
 	Legend & line(const Line2D &line2D, std::string name) {
 		return line(line2D.styleIndex, name, true, false);
 	}
+	Legend & fill(const Line2D &line2D, std::string name) {
+		return line(line2D.styleIndex, name, false, true);
+	}
 	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
 		svg.raw("<g>");
 		svg.rect(location.left, location.top, location.width(), location.height())
@@ -1018,8 +1022,15 @@ public:
 		for (size_t i = 0; i < entries.size(); ++i) {
 			auto &entry = entries[i];
 			double lineY = location.top + style.textPadding + (i + 0.5)*style.labelSize*style.lineHeight;
-			svg.line(lineX1, lineY, lineX2, lineY)
-				.attr("class", "svg-plot-line ", style.strokeClass(entry.style), " ", style.dashClass(entry.style));
+			if (entry.fill) {
+				double height = style.labelSize;
+				svg.rect(lineX1, lineY - height*0.5, lineX2 - lineX1, height)
+					.attr("class", "svg-plot-fill ", style.fillClass(entry.style), " ", style.hatchClass(entry.style));
+			}
+			if (entry.stroke) {
+				svg.line(lineX1, lineY, lineX2, lineY)
+					.attr("class", "svg-plot-line ", style.strokeClass(entry.style), " ", style.dashClass(entry.style));
+			}
 		}
 		svg.raw("</g>");
 		SvgFileDrawable::writeLabel(svg, style);
@@ -1188,7 +1199,7 @@ public:
 	}
 	
 	/** Creates a legend at a given position.
-	If `xRatio` and `yRatio` are in the range 0-1, the legend will be inside the plot.  Otherwise, it will poke outside the plot slightly (e.g. 1.5 will be 50% of the way out from the right/top edge, -0.2 will be 20% of the way out of the left/bottom edge).
+	If `xRatio` and `yRatio` are in the range 0-1, the legend will be inside the plot.  Otherwise, it will move outside the plot (e.g. -1 will be left/below the axes, including any labels).
 	*/
 	Legend & legend(double xRatio, double yRatio) {
 		Legend *legend = new Legend(*this, size, xRatio, yRatio);

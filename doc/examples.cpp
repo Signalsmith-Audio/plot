@@ -132,6 +132,31 @@ int main() {
 
 		plot.write("multiple-axes.svg");
 	}
+
+	{ // Legend
+		signalsmith::plot::Plot2D plot(250, 150);
+
+		auto &fillFast = plot.fill(1); // Add the most important things first, so they're on top
+		auto &line = plot.line(0), &fillSlow = plot.fill(0);
+
+		for (double d = 0; d < 10; d += 0.05) {
+			double v = std::sin(d);
+			double r = (10 - d)/10;
+			line.add(d, v);
+			fillSlow.add(d, v*r);
+			fillFast.add(d, v*r*r);
+		}
+		auto &legend = plot.legend(0, 0); // to left of axis, vertically centered
+		legend.line(line, "signal").fill(fillSlow, "slow decay").fill(fillFast, "fast decay");
+		
+		plot.y.major(0).ticks(-1, 1);
+		plot.x.major(0, "min").minor(10, "max").label("time");
+		
+		auto style = plot.defaultStyle();
+		style.fillOpacity = 0.6;
+		style.cssSuffix = ".svg-plot-legend{fill: none}";
+		plot.write("legend.svg", style);
+	}
 }
 
 signalsmith::plot::PlotStyle customStyle() {

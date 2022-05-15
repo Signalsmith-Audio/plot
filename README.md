@@ -12,13 +12,14 @@ It's maintained mostly for internal Signalsmith Audio use, so I'm adding feature
 * auto-styled lines and fills
 	* simultaneous colour/dash/hatch sequences for accessibility
 	* styling done via (customisable) CSS where possible
-* explicit labelling (no legends)
+	* custom JS (included as source or URL)
+* explicit labelling on lines, or legends
 * values labelled with three levels: major/minor/tick
 	* no explicit axis-lines, use major gridlines instead
 * attempts not to draw out-of-view data
-* each edge can have multiple partial axes
+* each plot's edge can have multiple partial axes
 
-### Current limitations
+### Limitations
 
 * only 2D plots supported
 * one plot per figure
@@ -73,6 +74,7 @@ See [examples.cpp](doc/examples.cpp) for code examples.  Here are the images gen
 ![Style sequence](examples/style-sequence.svg)
 ![Intersecting circles](examples/filled-circles.svg)
 ![Multiple axes](examples/multiple-axes.svg)
+![Legend](examples/legend.svg)
 
 ### API principles
 

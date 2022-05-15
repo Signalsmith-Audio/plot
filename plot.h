@@ -43,7 +43,7 @@ public:
 	// Text
 	double labelSize = 12, valueSize = 10;
 	double fontAspectRatio = 1; /// scales size estimates, if using a particularly wide font
-	double textPadding = 5;
+	double textPadding = 5, lineHeight = 1.2;
 	// Fills
 	double fillOpacity = 0.25;
 	double hatchWidth = 1, hatchSpacing = 3;
@@ -111,6 +111,10 @@ public:
 			.svg-plot-axis {
 				stroke: none;
 				fill: #FFFFFFD9;
+			}
+			.svg-plot-legend {
+				stroke: none;
+				fill: #FFFFFFE4;
 			}
 			.svg-plot-line {
 				stroke: blue;
@@ -334,7 +338,7 @@ public:
 	Point2D prevPoint;
 	void startPath() {
 		streak = 0;
-		prevPoint = {std::nan(""), std::nan("")};
+		prevPoint.x = prevPoint.y = -1e300;
 	}
 	void addPoint(double x, double y) {
 		x = std::round(x*precision)*invPrecision;
@@ -381,9 +385,6 @@ protected:
 		for (auto &c : children) c->invalidateLayout();
 		layoutChildren.resize(0);
 	}
-	void layoutIfNeeded(const PlotStyle &style) {
-		if (!hasLayout) this->layout(style);
-	}
 	virtual void layout(const PlotStyle &style) {
 		hasLayout = true;
 		auto processChild = [&](std::unique_ptr<SvgDrawable> &child) {
@@ -406,6 +407,10 @@ public:
 	virtual ~SvgDrawable() {}
 	SvgDrawable(const SvgDrawable &other) = delete;
 	SvgDrawable & operator =(const SvgDrawable &other) = delete;
+
+	Bounds layoutIfNeeded(const PlotStyle &style) {
+		return hasLayout ? bounds : this->layout(style);
+f	}
 
 	/// Takes ownership of the child
 	void addChild(SvgDrawable *child) {
@@ -697,7 +702,7 @@ public:
 
 class TextLabel : public SvgDrawable {
 	double textWidth = 0;
-	void write(SvgWriter &svg) {
+	void write(SvgWriter &svg, double fontSize) {
 		{
 			auto text = svg.tag("text").attr("class", cssClass);
 			double tx = drawAt.x, ty = drawAt.y;
@@ -710,6 +715,7 @@ class TextLabel : public SvgDrawable {
 			} else {
 				tx += textWidth*alignment;
 			}
+			ty -= fontSize*0.1; // Just a vertical alignment tweak
 			if (vertical) {
 				text.attr("x", 0).attr("y", 0)
 					.attr("transform", "rotate(-90) translate(", -ty, " ", tx, ")");
@@ -744,8 +750,8 @@ protected:
 public:
 	TextLabel(Point2D at, double alignment, std::string text, std::string cssClass="svg-plot-label", bool vertical=false, bool isValue=false) : drawAt(at), alignment(alignment), text(text), cssClass(cssClass), vertical(vertical), isValue(isValue) {}
 	
-	void writeLabel(SvgWriter &svg, const PlotStyle &) override {
-		write(svg);
+	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
+		write(svg, isValue ? style.valueSize : style.labelSize);
 	}
 };
 
@@ -840,7 +846,6 @@ public:
 				double tx = px, ty = py;
 				double fontSize = style.labelSize;
 				double letterHeight = fontSize*0.8;
-				ty -= fontSize*0.1; // Just a vertical alignment tweak
 
 				double space = fontSize*0.25;
 				double verticalWiggle = fontSize*0.3;
@@ -949,6 +954,75 @@ public:
 			svg.raw("\"/>");
 		}
 		SvgDrawable::writeData(svg, style);
+	}
+};
+
+class Legend : public SvgFileDrawable {
+	SvgFileDrawable &ref;
+	Bounds dataBounds;
+	double rx, ry;
+	Bounds location;
+	struct Entry {
+		PlotStyle::Counter style;
+		std::string name;
+		bool stroke, fill;
+	};
+	std::vector<Entry> entries;
+public:
+	Legend(SvgFileDrawable &ref, Bounds dataBounds, double rx, double ry) : ref(ref), dataBounds(dataBounds), rx(rx), ry(ry) {}
+	
+	void layout(const PlotStyle &style) override {
+		Bounds refBounds = ref.layoutIfNeeded(style);
+		double exampleLineWidth = style.labelSize*1.5; // 1.5em
+		double longestLabel = 0;
+		for (auto &e : entries) {
+			longestLabel = std::max(longestLabel, estimateUtf8Width(e.name.c_str()));
+		}
+		double width = exampleLineWidth + style.textPadding*3 + longestLabel*style.labelSize;
+		double height = style.textPadding*2 + entries.size()*style.labelSize*style.lineHeight;
+		
+		double extraW = dataBounds.width() - width;
+		double extraH = dataBounds.height() - height;
+		Point2D topLeft = {
+			dataBounds.left + extraW*std::max(0.0, std::min(1.0, rx)),
+			dataBounds.bottom - height - extraH*std::max(0.0, std::min(1.0, ry))
+		};
+		if (rx < 0) topLeft.x += (refBounds.left - width - topLeft.x)*-rx;
+		if (rx > 1) topLeft.x += (refBounds.right - topLeft.x)*(rx - 1);
+		if (ry < 0) topLeft.y += (refBounds.bottom - topLeft.y)*-ry;
+		if (ry > 1) topLeft.y += (refBounds.top - height - topLeft.y)*(ry - 1);
+		this->bounds = location = {topLeft.x, topLeft.x + width, topLeft.y, topLeft.y + height};
+		
+		for (size_t i = 0; i < entries.size(); ++i) {
+			auto &entry = entries[i];
+			double labelX = topLeft.x + style.textPadding*2 + exampleLineWidth;
+			double labelY = location.top + style.textPadding + (i + 0.5)*style.labelSize*style.lineHeight;
+			auto *label = new TextLabel({labelX, labelY}, 1, entry.name, "svg-plot-label", false, false);
+			this->addLayoutChild(label);
+		}
+		SvgFileDrawable::layout(style);
+	}
+	Legend & line(PlotStyle::Counter style, std::string name, bool stroke=true, bool fill=false) {
+		entries.push_back(Entry{style, name, stroke, fill});
+		return *this;
+	}
+	Legend & line(const Line2D &line2D, std::string name) {
+		return line(line2D.styleIndex, name, true, false);
+	}
+	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
+		svg.raw("<g>");
+		svg.rect(location.left, location.top, location.width(), location.height())
+			.attr("class", "svg-plot-legend");
+		double lineX1 = location.left + style.textPadding;
+		double lineX2 = lineX1 + style.labelSize*1.5; // 1.5em
+		for (size_t i = 0; i < entries.size(); ++i) {
+			auto &entry = entries[i];
+			double lineY = location.top + style.textPadding + (i + 0.5)*style.labelSize*style.lineHeight;
+			svg.line(lineX1, lineY, lineX2, lineY)
+				.attr("class", "svg-plot-line ", style.strokeClass(entry.style), " ", style.dashClass(entry.style));
+		}
+		svg.raw("</g>");
+		SvgFileDrawable::writeLabel(svg, style);
 	}
 };
 
@@ -1111,6 +1185,15 @@ public:
 	template<class ...Args>
 	Line2D & fill(Args &&...args) {
 		return line(args...).drawLine(false).drawFill(true);
+	}
+	
+	/** Creates a legend at a given position.
+	If `xRatio` and `yRatio` are in the range 0-1, the legend will be inside the plot.  Otherwise, it will poke outside the plot slightly (e.g. 1.5 will be 50% of the way out from the right/top edge, -0.2 will be 20% of the way out of the left/bottom edge).
+	*/
+	Legend & legend(double xRatio, double yRatio) {
+		Legend *legend = new Legend(*this, size, xRatio, yRatio);
+		this->addChild(legend);
+		return *legend;
 	}
 };
 

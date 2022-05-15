@@ -626,7 +626,9 @@ public:
 		unitMap = valueToUnit;
 		return *this;
 	}
-
+	Axis & range(double map(double)) {
+		return range(std::function<double(double)>(map));
+	}
 	Axis & range(std::function<double(double)> map, double lowValue, double highValue) {
 		double lowMapped = map(lowValue), highMapped = map(highValue);
 		return range([=](double v) {
@@ -634,7 +636,9 @@ public:
 			return (mapped - lowMapped)/(highMapped - lowMapped);
 		});
 	}
-
+	Axis & range(double map(double), double lowValue, double highValue) {
+		return range(std::function<double(double)>(map), lowValue, highValue);
+	}
 	Axis & linear(double low, double high) {
 		return range([=](double v) {
 			return (v - low)/(high - low);

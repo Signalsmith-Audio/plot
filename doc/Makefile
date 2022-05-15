@@ -24,3 +24,4 @@ doxygen:
 publish: examples doxygen
 	publish-signalsmith-raw /code/plot
 	cd .. && publish-signalsmith-git /code/plot.git
+	git push github

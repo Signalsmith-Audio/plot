@@ -16,13 +16,15 @@ It's maintained mostly for internal Signalsmith Audio use, so I'm adding feature
 * explicit labelling on lines, or legends
 * values labelled with three levels: major/minor/tick
 	* no explicit axis-lines, use major gridlines instead
-* attempts not to draw out-of-view data
+* simplifies paths
+	* attempts not to draw out-of-view data
+	* drops points along almost-straight lines
 * each plot's edge can have multiple partial axes
+* basic grid (each row/column stretches to contain its contents)
 
 ### Limitations
 
 * only 2D plots supported
-* one plot per figure
 * no automatic label placement or de-collision
 * text lengths are heuristically estimated
 
@@ -75,6 +77,7 @@ See [examples.cpp](doc/examples.cpp) for code examples.  Here are the images gen
 ![Intersecting circles](doc/examples/filled-circles.svg)
 ![Multiple axes](doc/examples/multiple-axes.svg)
 ![Legend](doc/examples/legend.svg)
+![Grid](doc/examples/grid.svg)
 
 ### API principles
 

@@ -157,6 +157,43 @@ int main() {
 		style.cssSuffix = ".svg-plot-legend{fill: none}";
 		plot.write("legend.svg", style);
 	}
+
+	{ // Grid
+		signalsmith::plot::Figure figure;
+
+		auto &mainPlot = figure.cell(0, 0).plot(100, 100);
+		auto &topPlot = figure.cell(0, -1).plot(100, 30);
+		auto &leftPlot = figure.cell(-1, 0).plot(30, 100);
+
+		{
+			auto &line = mainPlot.line();
+			for (double a = 0; a < 2.1*M_PI; a += 0.0001) {
+				line.add(std::cos(a), std::sin(a));
+			}
+			mainPlot.x.linear(-1, 1).minors(-1, 0, 1).blankLabels();
+			mainPlot.y.linear(-1, 1).flip().minors(-1, 0, 1).blankLabels();
+		}
+		{
+			topPlot.x.linear(-1, 1).minors(-1, 0, 1).blankLabels();
+			topPlot.y.minors(0, 1).flip();
+			auto &line = topPlot.line().fillToY(0);
+			for (double x = -1; x < 1; x += 0.0001) {
+				double x2 = std::sin(x*M_PI/2);
+				line.add(x2, std::sqrt(1 - x2*x2));
+			}
+		}
+		{
+			leftPlot.y.linear(-1, 1).minors(-1, 0, 1).blankLabels();
+			leftPlot.x.linear(1, 0).minors(0, 1);
+			auto &line = leftPlot.line().fillToX(0);
+			for (double x = -1; x < 1; x += 0.0001) {
+				double x2 = std::sin(x*M_PI/2);
+				line.add(std::sqrt(1 - x2*x2), x2);
+			}
+		}
+
+		figure.write("grid.svg");
+	}
 }
 
 signalsmith::plot::PlotStyle customStyle() {

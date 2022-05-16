@@ -238,7 +238,7 @@ class SvgWriter {
 	double precision, invPrecision;
 public:
 	SvgWriter(std::ostream &output, Bounds bounds, double precision) : output(output), clipStack({bounds}), precision(precision), invPrecision(1.0/precision) {}
-
+	
 	SvgWriter & raw() {
 		return *this;
 	}
@@ -333,18 +333,26 @@ public:
 	Tag rect(double x, double y, double w, double h) {
 		return tag("rect", true).attr("x", x).attr("y", y).attr("width", w).attr("height", h);
 	}
-	
+
+	double round(double v) {
+		return std::round(v*precision)*invPrecision;
+	};
+
 	char streak = 0; // Tracks streaks of points which are outside the clip
-	Point2D prevPoint;
+	Point2D prevPoint, lastDrawn, pending;
+	bool hasDrawnPoint = false, hasPendingPoint = false;
+	double totalPendingError = 0;
 	void startPath() {
 		streak = 0;
 		prevPoint.x = prevPoint.y = -1e300;
+		hasPendingPoint = hasDrawnPoint = false;
+	}
+	void endPath() {
+		if (hasPendingPoint) {
+			raw(" ", round(pending.x), " ", round(pending.y));
+		}
 	}
 	void addPoint(double x, double y) {
-		x = std::round(x*precision)*invPrecision;
-		y = std::round(y*precision)*invPrecision;
-		if (x == prevPoint.x && y == prevPoint.y) return;
-
 		auto clip = clipStack.back();
 		/// Bitmask indicating which direction(s) the point is outside the bounds
 		char mask = (clip.left > x)
@@ -356,13 +364,45 @@ public:
 		if (!streak) {
 			if (prevStreak) { // we broke the streak - draw the last in-streak point
 				if (!std::isnan(prevPoint.x) && !std::isnan(prevPoint.y)) {
-					raw(" ", prevPoint.x, " ", prevPoint.y);
+					raw(" ", round(prevPoint.x), " ", round(prevPoint.y));
 				}
 			}
 			if (!std::isnan(x) && !std::isnan(y)) {
-				raw(" ", x, " ", y);
+				if (hasDrawnPoint) {
+					if (hasPendingPoint) {
+						// Approximate the pending point as being on the line from last-drawn point -> current
+						double d1 = std::hypot(pending.x - lastDrawn.x, pending.y - lastDrawn.y);
+						double d2 = std::hypot(x - lastDrawn.x, y - lastDrawn.y);
+						double scale = d2 ? d1/d2 : 0;
+						double extX = lastDrawn.x + (x - lastDrawn.x)*scale;
+						double extY = lastDrawn.y + (y - lastDrawn.y)*scale;
+						// How far off would that be?
+						totalPendingError += std::hypot(extX - pending.x, extY - pending.y);
+						if (totalPendingError > invPrecision) {
+							// Would be too much accumulated error.  Draw the previous line-segment, and start a new one.
+							raw(" ", round(pending.x), " ", round(pending.y));
+							lastDrawn = pending;
+							totalPendingError = 0;
+						}
+						pending = {x, y};
+					} else {
+						pending = {x, y};
+						hasPendingPoint = true;
+						totalPendingError = 0;
+					}
+				} else {
+					raw(" ", round(x), " ", round(y));
+					hasDrawnPoint = true;
+					lastDrawn = {x, y};
+				}
 			}
 			streak = mask;
+			if (streak) {
+				if (hasPendingPoint) {
+					raw(" ", round(pending.x), " ", round(pending.y));
+				}
+				hasDrawnPoint = hasPendingPoint = false;
+			}
 		}
 		prevPoint = {x, y};
 	}
@@ -951,6 +991,7 @@ public:
 				svg.addPoint(axisX.map(points.back().x), axisY.map(fillToPoint.y));
 				svg.addPoint(axisX.map(points[0].x), axisY.map(fillToPoint.y));
 			}
+			svg.endPath();
 			svg.raw("\"/>");
 		}
 		if (_drawLine) {
@@ -961,6 +1002,7 @@ public:
 			for (auto &p : points) {
 				svg.addPoint(axisX.map(p.x), axisY.map(p.y));
 			}
+			svg.endPath();
 			svg.raw("\"/>");
 		}
 		SvgDrawable::writeData(svg, style);
@@ -1238,13 +1280,12 @@ public:
 };
 
 class Grid : public Cell {
-	int _cols = 0, _rows = 0;
+	int _colMax = 0, _colMin = 0, _rowMax = 0, _rowMin = 0;
 	struct Item {
 		int column, row;
-		int width, height;
 		std::unique_ptr<Cell> cell;
 		Point2D transpose = {0, 0};
-		Item(int column, int row, int width, int height) : column(column), row(row), width(width), height(height), cell(new Cell()) {}
+		Item(int column, int row) : column(column), row(row), cell(new Cell()) {}
 	};
 	std::vector<Item> items;
 
@@ -1264,19 +1305,18 @@ protected:
 		struct Range {
 			double min = 0, max = 0;
 			double offset = 0;
-			void include(double v) {
+			Range & include(double v) {
 				min = std::min(v, min);
 				max = std::max(v, max);
+				return *this;
 			}
 		};
-		std::vector<Range> colRange(_cols);
-		std::vector<Range> rowRange(_rows);
+		std::vector<Range> colRange(_colMax - _colMin + 1);
+		std::vector<Range> rowRange(_rowMax - _rowMin + 1);
 		for (auto &it : items) {
 			Bounds bounds = it.cell->layoutIfNeeded(style);
-			colRange[it.column].include(bounds.left);
-			colRange[it.column + it.width - 1].include(bounds.right);
-			rowRange[it.row].include(bounds.top);
-			rowRange[it.row + it.height - 1].include(bounds.bottom);
+			colRange[it.column - _colMin].include(bounds.left).include(bounds.right);
+			rowRange[it.row - _rowMin].include(bounds.top).include(bounds.bottom);
 		}
 		this->bounds = {0, 0, 0, 0};
 		double offset = 0;
@@ -1292,7 +1332,7 @@ protected:
 		}
 		this->bounds.bottom = offset - style.padding;
 		for (auto &it : items) {
-			it.transpose = {colRange[it.column].offset, rowRange[it.row].offset};
+			it.transpose = {colRange[it.column - _colMin].offset, rowRange[it.row - _rowMin].offset};
 		}
 		SvgDrawable::layout(style);
 	}
@@ -1307,24 +1347,22 @@ protected:
 	}
 public:
 	int rows() const {
-		return _rows;
+		return _rowMax - _rowMin;
 	}
 	int columns() const {
-		return _cols;
+		return _colMax - _colMin;
 	}
-	Cell & cell(int column, int row, int width=1, int height=1) {
-		column = std::max(0, column);
-		row = std::max(0, row);
-		width = std::max(1, width);
-		height = std::max(1, height);
-		_cols = std::max(_cols, column + width);
-		_rows = std::max(_rows, row + height);
+	Cell & cell(int column, int row) {
+		_colMin = std::min(_colMin, column);
+		_colMax = std::max(_colMax, column);
+		_rowMin = std::min(_rowMin, row);
+		_rowMax = std::max(_rowMax, row);
 		for (auto &it : items) {
-			if (it.row == row && it.column == column && it.width == width && it.height == height) {
+			if (it.row == row && it.column == column) {
 				return *it.cell;
 			}
 		}
-		items.emplace_back(column, row, width, height);
+		items.emplace_back(column, row);
 		return *(items.back().cell);
 	}
 };

@@ -338,70 +338,66 @@ public:
 		return std::round(v*precision)*invPrecision;
 	};
 
-	char streak = 0; // Tracks streaks of points which are outside the clip
-	Point2D prevPoint, lastDrawn, pending;
-	bool hasDrawnPoint = false, hasPendingPoint = false;
+	enum class PointState {start, outOfBounds, singlePoint, pendingLine};
+	PointState pointState = PointState::start;
+	char outOfBoundsMask = 0; // tracks which direction(s) we are out of bounds
+	Point2D lastDrawn, prevPoint;
 	double totalPendingError = 0;
 	void startPath() {
-		streak = 0;
+		pointState = PointState::start;
+		outOfBoundsMask = 0;
 		prevPoint.x = prevPoint.y = -1e300;
-		hasPendingPoint = hasDrawnPoint = false;
 	}
 	void endPath() {
-		if (hasPendingPoint) {
-			raw(" ", round(pending.x), " ", round(pending.y));
+		if (pointState == PointState::pendingLine) {
+			raw(" ", round(prevPoint.x), " ", round(prevPoint.y));
 		}
 	}
 	void addPoint(double x, double y) {
+		if (std::isnan(x) || std::isnan(y)) return;
 		auto clip = clipStack.back();
 		/// Bitmask indicating which direction(s) the point is outside the bounds
 		char mask = (clip.left > x)
 			| (2*(clip.right < x))
 			| (4*(clip.top > y))
 			| (8*(clip.bottom < y));
-		char prevStreak = streak;
-		streak &= mask;
-		if (!streak) {
-			if (prevStreak) { // we broke the streak - draw the last in-streak point
-				if (!std::isnan(prevPoint.x) && !std::isnan(prevPoint.y)) {
+		outOfBoundsMask &= mask;
+		if (!outOfBoundsMask) {
+			if (pointState == PointState::outOfBounds) {
+				// Draw the most recent out-of-bounds point
+				raw(" ", round(prevPoint.x), " ", round(prevPoint.y));
+				lastDrawn = prevPoint;
+				pointState = PointState::singlePoint;
+			}
+			if (pointState == PointState::singlePoint) {
+				pointState = PointState::pendingLine;
+				totalPendingError = 0;
+			} else if (pointState == PointState::pendingLine) {
+				// Approximate the pending point as being on the line from last-drawn point -> current
+				double d1 = std::hypot(prevPoint.x - lastDrawn.x, prevPoint.y - lastDrawn.y);
+				double d2 = std::hypot(x - lastDrawn.x, y - lastDrawn.y);
+				double scale = d2 ? d1/d2 : 0;
+				double extX = lastDrawn.x + (x - lastDrawn.x)*scale;
+				double extY = lastDrawn.y + (y - lastDrawn.y)*scale;
+				// How far off would that be?
+				totalPendingError += std::hypot(extX - prevPoint.x, extY - prevPoint.y);
+				if (totalPendingError > invPrecision) {
+					// Would be too much accumulated error.  Draw the pending segment, and start a new one.
+					raw(" ", round(prevPoint.x), " ", round(prevPoint.y));
+					lastDrawn = prevPoint;
+					totalPendingError = 0;
+				}
+			} else { // start
+				raw(" ", round(x), " ", round(y));
+				lastDrawn = {x, y};
+				pointState = PointState::singlePoint;
+			}
+			outOfBoundsMask = mask;
+			if (outOfBoundsMask) {
+				if (pointState == PointState::pendingLine) {
 					raw(" ", round(prevPoint.x), " ", round(prevPoint.y));
 				}
-			}
-			if (!std::isnan(x) && !std::isnan(y)) {
-				if (hasDrawnPoint) {
-					if (hasPendingPoint) {
-						// Approximate the pending point as being on the line from last-drawn point -> current
-						double d1 = std::hypot(pending.x - lastDrawn.x, pending.y - lastDrawn.y);
-						double d2 = std::hypot(x - lastDrawn.x, y - lastDrawn.y);
-						double scale = d2 ? d1/d2 : 0;
-						double extX = lastDrawn.x + (x - lastDrawn.x)*scale;
-						double extY = lastDrawn.y + (y - lastDrawn.y)*scale;
-						// How far off would that be?
-						totalPendingError += std::hypot(extX - pending.x, extY - pending.y);
-						if (totalPendingError > invPrecision) {
-							// Would be too much accumulated error.  Draw the previous line-segment, and start a new one.
-							raw(" ", round(pending.x), " ", round(pending.y));
-							lastDrawn = pending;
-							totalPendingError = 0;
-						}
-						pending = {x, y};
-					} else {
-						pending = {x, y};
-						hasPendingPoint = true;
-						totalPendingError = 0;
-					}
-				} else {
-					raw(" ", round(x), " ", round(y));
-					hasDrawnPoint = true;
-					lastDrawn = {x, y};
-				}
-			}
-			streak = mask;
-			if (streak) {
-				if (hasPendingPoint) {
-					raw(" ", round(pending.x), " ", round(pending.y));
-				}
-				hasDrawnPoint = hasPendingPoint = false;
+				pointState = PointState::outOfBounds;
 			}
 		}
 		prevPoint = {x, y};

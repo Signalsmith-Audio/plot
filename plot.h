@@ -440,7 +440,7 @@ public:
 /// Top-level objects which can generate SVG files
 class SvgFileDrawable : public SvgDrawable {
 public:
-	virtual PlotStyle defaultStyle() {
+	virtual PlotStyle defaultStyle() const {
 		return {};
 	}
 
@@ -602,6 +602,11 @@ public:
 	Axis & blank() {
 		tickList.clear();
 		autoLabel = false;
+		return *this;
+	}
+	/// Clear the names from any existing labels
+	Axis & blankLabels() {
+		for (auto &t : tickList) t.name = "";
 		return *this;
 	}
 	/// Whether the axis should draw on the non-default side (e.g. right/top)
@@ -1042,6 +1047,7 @@ public:
 };
 
 class Plot2D : public SvgFileDrawable {
+	std::string plotTitle;
 	std::vector<std::unique_ptr<Axis>> xAxes, yAxes;
 	Bounds size;
 public:
@@ -1212,10 +1218,13 @@ public:
 	}
 };
 
-class Figure : SvgFileDrawable {
+class Cell : public SvgFileDrawable {
+protected:
+	void layout(const PlotStyle &style) override {
+		this->bounds = {0, 0, 0, 0};
+		SvgFileDrawable::layout(style);
+	}
 public:
-	PlotStyle style;
-
 	Plot2D & plot(double widthPt, double heightPt) {
 		Plot2D *axes = new Plot2D({0, widthPt}, {heightPt, 0});
 		this->addChild(axes);
@@ -1226,17 +1235,105 @@ public:
 		this->addChild(axes);
 		return *axes;
 	}
-	
+};
+
+class Grid : public Cell {
+	int _cols = 0, _rows = 0;
+	struct Item {
+		int column, row;
+		int width, height;
+		std::unique_ptr<Cell> cell;
+		Point2D transpose = {0, 0};
+		Item(int column, int row, int width, int height) : column(column), row(row), width(width), height(height), cell(new Cell()) {}
+	};
+	std::vector<Item> items;
+
+	void writeItems(bool label, SvgWriter &svg, const PlotStyle &style) {
+		for (auto &it : items) {
+			svg.tag("g").attr("transform", "translate(", it.transpose.x, " ", it.transpose.y, ")");
+			if (label) {
+				it.cell->writeLabel(svg, style);
+			} else {
+				it.cell->writeData(svg, style);
+			}
+			svg.raw("</g>");
+		}
+	}
+protected:
 	void layout(const PlotStyle &style) override {
+		struct Range {
+			double min = 0, max = 0;
+			double offset = 0;
+			void include(double v) {
+				min = std::min(v, min);
+				max = std::max(v, max);
+			}
+		};
+		std::vector<Range> colRange(_cols);
+		std::vector<Range> rowRange(_rows);
+		for (auto &it : items) {
+			Bounds bounds = it.cell->layoutIfNeeded(style);
+			colRange[it.column].include(bounds.left);
+			colRange[it.column + it.width - 1].include(bounds.right);
+			rowRange[it.row].include(bounds.top);
+			rowRange[it.row + it.height - 1].include(bounds.bottom);
+		}
 		this->bounds = {0, 0, 0, 0};
-		SvgFileDrawable::layout(style);
+		double offset = 0;
+		for (auto &r : colRange) {
+			r.offset = offset - r.min;
+			offset += r.max - r.min + style.padding;
+		}
+		this->bounds.right = offset - style.padding;
+		offset = 0;
+		for (auto &r : rowRange) {
+			r.offset = offset - r.min;
+			offset += r.max - r.min + style.padding;
+		}
+		this->bounds.bottom = offset - style.padding;
+		for (auto &it : items) {
+			it.transpose = {colRange[it.column].offset, rowRange[it.row].offset};
+		}
+		SvgDrawable::layout(style);
 	}
-	
-	void write(std::ostream &o) {
-		SvgFileDrawable::write(o, style);
+
+	void writeData(SvgWriter &svg, const PlotStyle &style) override {
+		SvgDrawable::writeData(svg, style);
+		writeItems(false, svg, style);
 	}
-	void write(std::string svgFile) {
-		SvgFileDrawable::write(svgFile, style);
+	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
+		SvgDrawable::writeLabel(svg, style);
+		writeItems(true, svg, style);
+	}
+public:
+	int rows() const {
+		return _rows;
+	}
+	int columns() const {
+		return _cols;
+	}
+	Cell & cell(int column, int row, int width=1, int height=1) {
+		column = std::max(0, column);
+		row = std::max(0, row);
+		width = std::max(1, width);
+		height = std::max(1, height);
+		_cols = std::max(_cols, column + width);
+		_rows = std::max(_rows, row + height);
+		for (auto &it : items) {
+			if (it.row == row && it.column == column && it.width == width && it.height == height) {
+				return *it.cell;
+			}
+		}
+		items.emplace_back(column, row, width, height);
+		return *(items.back().cell);
+	}
+};
+
+class Figure : public Grid {
+public:
+	PlotStyle style;
+	PlotStyle defaultStyle() const override {
+		return style;
 	}
 };
 

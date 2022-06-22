@@ -42,11 +42,12 @@ public:
 	double tickH = 4, tickV = 5;
 	// Text
 	double labelSize = 12, valueSize = 10;
-	double fontAspectRatio = 1; /// scales size estimates, if using a particularly wide font
+	double fontAspectRatio = 1; ///< scales size estimates, if using a particularly wide font
 	double textPadding = 5, lineHeight = 1.2;
 	// Fills
 	double fillOpacity = 0.3;
 	double hatchWidth = 1, hatchSpacing = 3;
+	double animation = 2; ///< Animation duration
 
 	std::string scriptHref = "", scriptSrc = "";
 	std::string cssPrefix = "", cssSuffix = "";
@@ -338,6 +339,7 @@ public:
 		return std::round(v*precision)*invPrecision;
 	};
 
+	bool animated = false;
 	enum class PointState {start, outOfBounds, singlePoint, pendingLine};
 	PointState pointState = PointState::start;
 	char outOfBoundsMask = 0; // tracks which direction(s) we are out of bounds
@@ -347,6 +349,7 @@ public:
 		pointState = PointState::start;
 		outOfBoundsMask = 0;
 		prevPoint.x = prevPoint.y = -1e300;
+		raw("M");
 	}
 	void endPath() {
 		if (pointState == PointState::pendingLine) {
@@ -545,7 +548,49 @@ public:
 		}
 		svg.raw("</style>");
 		if (style.scriptHref.size()) svg.tag("script", true).attr("href", style.scriptHref);
-		if (style.scriptSrc.size()) svg.raw("<script>").write(style.scriptSrc).raw("</script>");
+		/*
+		(function(animationDuration) {
+			let animationPhase = 0;
+			let animations = [];
+			document.querySelectorAll("*[data-animate-d]").forEach(element => {
+				var frames = [], prevFrame = -1;
+				element.dataset.animateD.split(';').forEach(function (frame) {
+					let parts = frame.split("@");
+					frames.push({
+						r: parseFloat(parts[0]),
+						d: parts[1]
+					});
+				});
+				animations.push(function (r) {
+					var nextFrame = 0;
+					for (var f = 0; f != frames.length; ++f) {
+						if (frames[f].r <= r) nextFrame = f;
+					}
+					if (nextFrame != prevFrame) {
+						prevFrame = nextFrame;
+						element.setAttribute("d", frames[nextFrame].d);
+					}
+				});
+			});
+			let frameTime = Date.now();
+			function drawFrame() {
+				if (animationDuration > 0) {
+					let prev = frameTime;
+					frameTime = Date.now();
+					animationPhase += (frameTime - prev)*0.001/animationDuration;
+					animationPhase -= Math.floor(animationPhase);
+					for (var i = 0; i != animations.length; ++i) animations[i](animationPhase);
+				}
+
+				requestAnimationFrame(drawFrame);
+			}
+			drawFrame();
+		})(STYLE.ANIMATION);
+		*/
+		if (svg.animated || style.scriptSrc.size() > 0) svg.raw("<script>");
+		if (svg.animated) svg.raw("(function(k){function l(){if(k>0){var a=g;g=Date.now();c+=.001*(g-a)/k;c-=Math.floor(c);for(a=0;a!=h.length;++a)h[a](c)}requestAnimationFrame(l)}var c=0,h=[];document.querySelectorAll(\"*[data-animate-d]\").forEach(function(a){var d=[],m=-1;a.dataset.animateD.split(\";\").forEach(function(b){b=b.split(\"@\");d.push({r:parseFloat(b[0]),d:b[1]})});h.push(function(b){for(var e=0,f=0;f!=d.length;++f)d[f].r&lt;=b&amp;&amp;(e=f);e!=m&amp;&amp;(m=e,a.setAttribute(\"d\",d[e].d))})});var g=Date.now();l()})(").write(style.animation).raw(");");
+		svg.write(style.scriptSrc);
+		if (svg.animated || style.scriptSrc.size() > 0) svg.raw("</script>");
 		svg.raw("</svg>");
 	}
 	void write(std::string svgFile, const PlotStyle &style) {
@@ -858,12 +903,19 @@ class Line2D : public SvgDrawable {
 	
 	Axis &axisX, &axisY;
 	std::vector<Point2D> points;
+	struct Frame {
+		double ratio;
+		std::vector<Point2D> points;
+	};
+	std::vector<Frame> frames;
+	Point2D latest{0, 0};
 public:
 	PlotStyle::Counter styleIndex;
 
 	Line2D(Axis &axisX, Axis &axisY, PlotStyle::Counter styleIndex) : axisX(axisX), axisY(axisY), styleIndex(styleIndex) {}
 	
 	Line2D & add(double x, double y) {
+		latest = {x, y};
 		points.push_back({x, y});
 		axisX.autoValue(x);
 		axisY.autoValue(y);
@@ -878,6 +930,12 @@ public:
 	template<class X, class Y>
 	Line2D & addArray(X &&x, Y &&y) {
 		return addArray(std::forward<X>(x), std::forward<Y>(y), std::min<size_t>(x.size(), y.size()));
+	}
+	
+	Line2D & toFrame(double ratio) {
+		frames.push_back({ratio, points});
+		points.clear();
+		return *this;
 	}
 
 	/// @{
@@ -994,7 +1052,6 @@ public:
 	}
 
 	Line2D & label(std::string name, double degrees=0, double distance=0) {
-		Point2D latest = points.back();
 		return label(latest.x, latest.y, name, degrees, distance);
 	}
 
@@ -1012,39 +1069,52 @@ public:
 	}
 	
 	void writeData(SvgWriter &svg, const PlotStyle &style) override {
-		if (_drawFill) {
-			svg.raw("<path")
-				.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
-			svg.raw(" d=\"M");
+		auto writePoints = [&](std::vector<Point2D> &points, bool fill) {
 			svg.startPath();
 			for (auto &p : points) {
 				svg.addPoint(axisX.map(p.x), axisY.map(p.y));
 			}
-			if (fillToLine) {
-				auto &otherPoints = fillToLine->points;
-				for (auto it = otherPoints.rbegin(); it != otherPoints.rend(); ++it) {
-					svg.addPoint(fillToLine->axisX.map(it->x), fillToLine->axisY.map(it->y));
+			if (fill) {
+				if (fillToLine) {
+					auto &otherPoints = fillToLine->points;
+					for (auto it = otherPoints.rbegin(); it != otherPoints.rend(); ++it) {
+						svg.addPoint(fillToLine->axisX.map(it->x), fillToLine->axisY.map(it->y));
+					}
+				} else if (hasFillToX) {
+					svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points.back().y));
+					svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points[0].y));
+				} else if (hasFillToY) {
+					svg.addPoint(axisX.map(points.back().x), axisY.map(fillToPoint.y));
+					svg.addPoint(axisX.map(points[0].x), axisY.map(fillToPoint.y));
 				}
-			} else if (hasFillToX) {
-				svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points.back().y));
-				svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points[0].y));
-			} else if (hasFillToY) {
-				svg.addPoint(axisX.map(points.back().x), axisY.map(fillToPoint.y));
-				svg.addPoint(axisX.map(points[0].x), axisY.map(fillToPoint.y));
 			}
 			svg.endPath();
+		};
+		auto writeD = [&](bool fill){
+			svg.raw(" d=\"");
+			auto &p = points.size() || !frames.size() ? points : frames[0].points;
+			writePoints(p, fill);
+			if (frames.size() > 0) {
+				svg.animated = true;
+				svg.raw("\" data-animate-d=\"");
+				for (size_t i = 0; i < frames.size(); ++i) {
+					if (i > 0) svg.raw(";");
+					svg.write(frames[i].ratio).raw("@");
+					writePoints(frames[i].points, fill);
+				}
+			}
 			svg.raw("\"/>");
+		};
+		
+		if (_drawFill) {
+			svg.raw("<path")
+				.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
+			writeD(true);
 		}
 		if (_drawLine) {
 			svg.raw("<path")
 				.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), " ", style.dashClass(styleIndex));
-			svg.raw(" d=\"M");
-			svg.startPath();
-			for (auto &p : points) {
-				svg.addPoint(axisX.map(p.x), axisY.map(p.y));
-			}
-			svg.endPath();
-			svg.raw("\"/>");
+			writeD(false);
 		}
 		SvgDrawable::writeData(svg, style);
 	}
@@ -1393,7 +1463,7 @@ public:
 	int columns() const {
 		return _colMax - _colMin;
 	}
-	Cell & cell(int column, int row) {
+	Cell & operator ()(int column, int row) {
 		_colMin = std::min(_colMin, column);
 		_colMax = std::max(_colMax, column);
 		_rowMin = std::min(_rowMin, row);
@@ -1405,9 +1475,6 @@ public:
 		}
 		items.emplace_back(column, row);
 		return *(items.back().cell);
-	}
-	Cell & operator ()(int column, int row) {
-		return cell(column, row);
 	}
 };
 

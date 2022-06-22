@@ -79,6 +79,9 @@ See [examples.cpp](doc/examples.cpp) for code examples.  Here are the images gen
 ![Legend](doc/examples/legend.svg)
 ![Grid](doc/examples/grid.svg)
 
+Open in a new tab to see the JS animation:
+![Animation](doc/examples/animation.svg)
+
 ### API principles
 
 You create a top-level object, which could be a `Figure` or a `Plot2D`:

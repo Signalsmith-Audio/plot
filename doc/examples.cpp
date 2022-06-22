@@ -161,9 +161,10 @@ int main() {
 	{ // Grid
 		signalsmith::plot::Figure figure;
 
-		auto &mainPlot = figure.cell(0, 0).plot(100, 100);
-		auto &topPlot = figure.cell(0, -1).plot(100, 30);
-		auto &leftPlot = figure.cell(-1, 0).plot(30, 100);
+		// Cell access with (col, row)
+		auto &mainPlot = figure(0, 0).plot(100, 100);
+		auto &topPlot = figure(0, -1).plot(100, 30);
+		auto &leftPlot = figure(-1, 0).plot(30, 100);
 
 		{
 			auto &line = mainPlot.line();
@@ -193,6 +194,31 @@ int main() {
 		}
 
 		figure.write("grid.svg");
+	}
+	
+	{ // Animation
+		signalsmith::plot::Plot2D plot;
+		plot.x.linear(0, 10).major(0).minor(10);
+		plot.y.linear(-1, 1).major(0).minors(-1, 1);
+		{
+			auto &line = plot.line();
+			for (double p = 0; p < 2*M_PI; p += 1) {
+				for (double x = 0; x < 10; x += 0.01) {
+					line.add(x, std::sin(x + p));
+				}
+				line.toFrame(p/(2*M_PI));
+			}
+		}
+		{
+			auto &line = plot.line();
+			for (double p = 0; p < 2*M_PI; p += 0.1) {
+				for (double x = 0; x < 10; x += 0.01) {
+					line.add(x, std::sin(x + p));
+				}
+				line.toFrame(p/(2*M_PI));
+			}
+		}
+		plot.write("animation.svg");
 	}
 }
 

@@ -596,6 +596,9 @@ class Axis {
 	bool hasAutoValue = false;
 	bool autoScale, autoLabel;
 	std::string _label = "";
+
+	std::vector<Axis *> linked;
+	Axis *linkedParent = nullptr;
 public:
 	double drawLow, drawHigh;
 	double drawMin() const {
@@ -619,6 +622,7 @@ public:
 
 	/// Register a value for the auto-scale
 	void autoValue(double v) {
+		if (linkedParent) return linkedParent->autoValue(v);
 		if (!autoScale) return;
 		if (!hasAutoValue) {
 			autoMin = autoMax = v;
@@ -627,28 +631,64 @@ public:
 			autoMin = std::min(autoMin, v);
 			autoMax = std::max(autoMax, v);
 		}
+		for (auto other : linked) other->autoValue(v);
 	}
 	void autoSetup() {
 		if (hasAutoValue) {
 			if (autoScale) linear(autoMin, autoMax);
 			if (autoLabel) minors(autoMin, autoMax);
 		}
+		for (auto other : linked) other->autoSetup();
 	}
 	/// Prevent auto-labelling
-	Axis & blank() {
+	Axis & blank(bool includeLinked=false) {
 		tickList.clear();
 		autoLabel = false;
+		if (includeLinked) {
+			for (auto other : linked) other->blank();
+		}
 		return *this;
 	}
 	/// Clear the names from any existing labels
-	Axis & blankLabels() {
+	Axis & blankLabels(bool includeLinked=false) {
 		for (auto &t : tickList) t.name = "";
+		_label = "";
+		if (includeLinked) {
+			for (auto other : linked) other->blankLabels();
+		}
 		return *this;
 	}
+	/// Copy ticks/labels from another axis
+	Axis & copyFrom(Axis &other) {
+		unitMap = other.unitMap;
+		for (auto &t : other.tickList) {
+			tickList.push_back(t);
+		}
+		autoMin = other.autoMin;
+		autoMax = other.autoMax;
+		hasAutoValue = other.hasAutoValue;
+		autoScale = other.autoScale;
+		autoLabel = other.autoLabel;
+		for (auto &t : tickList) {
+			autoValue(t.value);
+		}
+		if (other._label.size()) this->_label = other._label;
+		for (auto o : linked) o->copyFrom(other);
+		return *this;
+	}
+	/// Link this axis to another, copying any ticks/labels set later as well
+	Axis & linkFrom(Axis &other) {
+		copyFrom(other);
+		other.linked.push_back(this);
+		linkedParent = &other;
+		return *this;
+	}
+	
 	/// Whether the axis should draw on the non-default side (e.g. right/top)
 	bool flipped = false;
 	Axis & flip(bool flip=true) {
 		flipped = flip;
+		for (auto other : linked) other->flip(flip);
 		return *this;
 	}
 	
@@ -656,15 +696,17 @@ public:
 	Axis & label(std::string l, PlotStyle::Counter index=-1) {
 		_label = l;
 		styleIndex = index;
+		for (auto other : linked) other->label(l, index);
 		return *this;
 	}
-	const std::string & label() {
+	const std::string & label() const {
 		return _label;
 	}
 
 	Axis & range(std::function<double(double)> valueToUnit) {
 		autoScale = false;
 		unitMap = valueToUnit;
+		for (auto other : linked) other->range(valueToUnit);
 		return *this;
 	}
 	Axis & range(double map(double)) {
@@ -700,6 +742,7 @@ public:
 		t.strength = Tick::Strength::major;
 		tickList.push_back(t);
 		autoLabel = false;
+		for (auto other : linked) other->major(args...);
 		return *this;
 	}
 	template<class ...Args>
@@ -709,6 +752,7 @@ public:
 		t.strength = Tick::Strength::minor;
 		tickList.push_back(t);
 		autoLabel = false;
+		for (auto other : linked) other->minor(args...);
 		return *this;
 	}
 	template<class ...Args>
@@ -718,6 +762,7 @@ public:
 		t.strength = Tick::Strength::tick;
 		tickList.push_back(t);
 		autoLabel = false;
+		for (auto other : linked) other->tick(args...);
 		return *this;
 	}
 	
@@ -1360,6 +1405,9 @@ public:
 		}
 		items.emplace_back(column, row);
 		return *(items.back().cell);
+	}
+	Cell & operator ()(int column, int row) {
+		return cell(column, row);
 	}
 };
 

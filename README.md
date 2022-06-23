@@ -10,7 +10,7 @@ It's maintained mostly for internal Signalsmith Audio use, so I'm adding feature
 
 * SVG output only
 * auto-styled lines and fills
-	* simultaneous colour/dash/hatch sequences for accessibility
+	* simultaneous colour/dash/hatch/marker sequences for accessibility
 	* styling done via (customisable) CSS where possible
 	* custom JS (included as source or URL)
 * explicit labelling on lines, or legends
@@ -27,6 +27,7 @@ It's maintained mostly for internal Signalsmith Audio use, so I'm adding feature
 * only 2D plots supported
 * no automatic label placement or de-collision
 * text lengths are heuristically estimated
+* animations are currently JavaScript based
 
 ## How to use
 

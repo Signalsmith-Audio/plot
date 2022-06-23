@@ -25,7 +25,7 @@ int main() {
 		plot.write("default-2d.svg");
 	}
 	
-	{ // Demonstrating default colour/dash sequence
+	{ // Demonstrating default colour/dash/hatch/marker sequence
 		signalsmith::plot::Plot2D plot(320, 80);
 		
 		// Prevent it from adding default ticks
@@ -36,6 +36,7 @@ int main() {
 			auto &line = plot.line().fillToY(0);
 			line.add(i - 0.5, 0);
 			line.add(i + 0.5, 1);
+			line.marker(i, 0.5);
 
 			plot.x.tick(i);
 		}

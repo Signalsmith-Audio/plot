@@ -39,7 +39,7 @@ class PlotStyle {
 public:
 	double padding = 10;
 	double lineWidth = 1.5, precision = 100;
-	double markerSize = 3;
+	double markerSize = 3.25;
 	double tickH = 4, tickV = 5;
 	// Text
 	double labelSize = 12, valueSize = 10;
@@ -54,7 +54,14 @@ public:
 	std::string cssPrefix = "", cssSuffix = "";
 	std::vector<std::string> colours = {"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
 	std::vector<std::vector<double>> dashes = {{}, {1.2, 1.2}, {2.8, 1.6}, {5, 4}, {4, 1, 1, 1, 1, 1}, {10, 3}, {4, 2, 1, 2}};
-	std::vector<std::string> markers = {"<circle cx=\"0\" cy=\"0\" r=\"1\"/>", "<path d=\"M 0 1.27 -1.27 0 0 -1.27 1.27 0 Z\" />", "<rect x=\"-0.9\" y=\"-0.9\" width=\"1.8\" height=\"1.8\"/>"};
+	/// SVG literals for the markers.  These should be centered on `(0, 0)` and look correct next to a filled circle of radius 1.  They will be given both a stroke and fill-class, so they should specify `fill="none"`/`stroke="none"` if fill/stroke is not wanted.
+	std::vector<std::string> markers = {
+		"<circle cx=\"0\" cy=\"0\" r=\"1\" stroke=\"none\"/>",
+		"<path d=\"M0 0.9 -0.9 0 0 -0.9 0.9 0Z\" fill=\"#FFFA\" stroke-linejoin=\"miter\" stroke-width=\"0.6\"/>",
+		"<rect x=\"-0.9\" y=\"-0.9\" width=\"1.8\" height=\"1.8\" stroke=\"none\"/>",
+		"<circle cx=\"0\" cy=\"0\" fill=\"#FFFA\" r=\"0.8\" stroke-width=\"0.65\"/>",
+		"<path stroke=\"none\" d=\"M0 -1.25 1.25 0.9 -1.25 0.9Z\"/>"
+	};
 
 	struct Hatch {
 		std::vector<double> angles;
@@ -68,6 +75,7 @@ public:
 
 	struct Counter {
 		int colour, dash, hatch, marker;
+		Counter(int colour, int dash, int hatch, int marker) : colour(colour), dash(dash), hatch(hatch), marker(marker) {}
 		Counter(int index=0) : colour(index), dash(index), hatch(index), marker(index) {}
 
 		/// Increment the counter, and return the previous value
@@ -79,25 +87,37 @@ public:
 			++marker;
 			return result;
 		}
+		Counter withColour(int index) {
+			return Counter(index, dash, hatch, marker);
+		}
+		Counter withDash(int index) {
+			return Counter(colour, index, hatch, marker);
+		}
+		Counter withHatch(int index) {
+			return Counter(colour, dash, index, marker);
+		}
+		Counter withMarker(int index) {
+			return Counter(colour, dash, hatch, index);
+		}
 	};
 	std::string strokeClass(const Counter &counter) const {
-		if (counter.colour < 0 || colours.size() == 0) return "";
+		if (counter.colour < 0 || colours.size() == 0) return "svg-plot-s";
 		return "svg-plot-s" + std::to_string(counter.colour%(int)colours.size());
 	}
 	std::string fillClass(const Counter &counter) const {
-		if (counter.colour < 0 || colours.size() == 0) return "";
+		if (counter.colour < 0 || colours.size() == 0) return "svg-plot-f";
 		return "svg-plot-f" + std::to_string(counter.colour%(int)colours.size());
 	}
 	std::string textClass(const Counter &counter) const {
-		if (counter.colour < 0 || colours.size() == 0) return "";
+		if (counter.colour < 0 || colours.size() == 0) return "svg-plot-t";
 		return "svg-plot-t" + std::to_string(counter.colour%(int)colours.size());
 	}
 	std::string dashClass(const Counter &counter) const {
-		if (counter.dash < 0 || dashes.size() == 0) return "";
+		if (counter.dash < 0 || dashes.size() == 0) return "svg-plot-d";
 		return "svg-plot-d" + std::to_string(counter.dash%(int)dashes.size());
 	}
 	std::string hatchClass(const Counter &counter) const {
-		if (counter.hatch < 0 || hatches.size() == 0) return "";
+		if (counter.hatch < 0 || hatches.size() == 0) return "svg-plot-h";
 		return "svg-plot-h" + std::to_string(counter.hatch%(int)hatches.size());
 	}
 	std::string markerId(const Counter &counter) const {
@@ -171,6 +191,15 @@ public:
 			.svg-plot-hatch {
 				stroke: #FFF;
 				stroke-width: )CSS" << hatchWidth << R"CSS(px;
+			}
+			.svg-plot-marker {
+				transform: scale()CSS" << markerSize << R"CSS();
+			}
+			.svg-plot-s {
+				stroke: #000;
+			}
+			.svg-plot-f, .svg-plot-t {
+				fill: #000;
 			}
 		)CSS";
 		
@@ -515,7 +544,7 @@ public:
 		)*std::sqrt(2));
 		svg.raw("<defs>");
 		for (size_t i = 0; i < style.markers.size(); ++i) {
-			svg.tag("g").attr("id", style.markerId(i));
+			svg.tag("g").attr("id", style.markerId(i)).attr("class", "svg-plot-marker");
 			svg.raw(style.markers[i]).raw("</g>");
 		}
 		for (size_t i = 0; i < style.hatches.size(); ++i) {
@@ -1100,8 +1129,8 @@ public:
 		for (auto marker : markers) {
 			svg.tag("use", true)
 				.attr("href", "#", style.markerId(marker.shape >= 0 ? marker.shape : styleIndex))
-				.attr("class", style.fillClass(styleIndex))
-				.attr("transform", "translate(", axisX.map(marker.point.x), " ", axisY.map(marker.point.y), ") scale(", style.markerSize, ")");
+				.attr("class", style.fillClass(styleIndex), " ", style.strokeClass(styleIndex))
+				.attr("transform", "translate(", axisX.map(marker.point.x), " ", axisY.map(marker.point.y), ")");
 		}
 		SvgDrawable::writeLabel(svg, style);
 	}
@@ -1166,7 +1195,7 @@ class Legend : public SvgFileDrawable {
 	struct Entry {
 		PlotStyle::Counter style;
 		std::string name;
-		bool stroke, fill;
+		bool stroke, fill, marker;
 	};
 	std::vector<Entry> entries;
 public:
@@ -1203,15 +1232,27 @@ public:
 		}
 		SvgFileDrawable::layout(style);
 	}
-	Legend & line(PlotStyle::Counter style, std::string name, bool stroke=true, bool fill=false) {
-		entries.push_back(Entry{style, name, stroke, fill});
+	Legend & add(PlotStyle::Counter style, std::string name, bool stroke=true, bool fill=false, bool marker=false) {
+		entries.push_back(Entry{style, name, stroke, fill, marker});
 		return *this;
 	}
+	Legend & line(PlotStyle::Counter style, std::string name) {
+		return add(style, name, true, false, false);
+	}
 	Legend & line(const Line2D &line2D, std::string name) {
-		return line(line2D.styleIndex, name, true, false);
+		return add(line2D.styleIndex, name, true, false, false);
+	}
+	Legend & fill(PlotStyle::Counter style, std::string name) {
+		return add(style, name, false, true, false);
 	}
 	Legend & fill(const Line2D &line2D, std::string name) {
-		return line(line2D.styleIndex, name, false, true);
+		return add(line2D.styleIndex, name, false, true, false);
+	}
+	Legend & marker(PlotStyle::Counter style, std::string name) {
+		return add(style, name, false, false, true);
+	}
+	Legend & marker(const Line2D &line2D, std::string name) {
+		return add(line2D.styleIndex, name, false, false, true);
 	}
 	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
 		svg.raw("<g>");
@@ -1230,6 +1271,12 @@ public:
 			if (entry.stroke) {
 				svg.line(lineX1, lineY, lineX2, lineY)
 					.attr("class", "svg-plot-line ", style.strokeClass(entry.style), " ", style.dashClass(entry.style));
+			}
+			if (entry.marker) {
+				svg.tag("use", true)
+					.attr("href", "#", style.markerId(entry.style))
+					.attr("class", style.fillClass(entry.style), " ", style.strokeClass(entry.style))
+					.attr("transform", "translate(", (lineX1 + lineX2)/2, " ", lineY, ")");
 			}
 		}
 		svg.raw("</g>");

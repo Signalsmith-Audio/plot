@@ -39,6 +39,7 @@ class PlotStyle {
 public:
 	double padding = 10;
 	double lineWidth = 1.5, precision = 100;
+	double markerSize = 3;
 	double tickH = 4, tickV = 5;
 	// Text
 	double labelSize = 12, valueSize = 10;
@@ -53,6 +54,7 @@ public:
 	std::string cssPrefix = "", cssSuffix = "";
 	std::vector<std::string> colours = {"#0073E6", "#CC0000", "#00B300", "#806600", "#E69900", "#CC00CC"};
 	std::vector<std::vector<double>> dashes = {{}, {1.2, 1.2}, {2.8, 1.6}, {5, 4}, {4, 1, 1, 1, 1, 1}, {10, 3}, {4, 2, 1, 2}};
+	std::vector<std::string> markers = {"<circle cx=\"0\" cy=\"0\" r=\"1\"/>", "<path d=\"M 0 1.27 -1.27 0 0 -1.27 1.27 0 Z\" />", "<rect x=\"-0.9\" y=\"-0.9\" width=\"1.8\" height=\"1.8\"/>"};
 
 	struct Hatch {
 		std::vector<double> angles;
@@ -65,8 +67,8 @@ public:
 	std::vector<Hatch> hatches = {{}, {-50}, {{30}, 0.9, 0.8}, {{8, 93}, 0.7, 1}};
 
 	struct Counter {
-		int colour, dash, hatch;
-		Counter(int index=0) : colour(index), dash(index), hatch(index) {}
+		int colour, dash, hatch, marker;
+		Counter(int index=0) : colour(index), dash(index), hatch(index), marker(index) {}
 
 		/// Increment the counter, and return the previous value
 		Counter bump() {
@@ -74,6 +76,7 @@ public:
 			++colour;
 			++dash;
 			++hatch;
+			++marker;
 			return result;
 		}
 	};
@@ -96,6 +99,9 @@ public:
 	std::string hatchClass(const Counter &counter) const {
 		if (counter.hatch < 0 || hatches.size() == 0) return "";
 		return "svg-plot-h" + std::to_string(counter.hatch%(int)hatches.size());
+	}
+	std::string markerId(const Counter &counter) const {
+		return "svg-plot-marker" + std::to_string(counter.marker%(int)markers.size());
 	}
 	
 	void css(std::ostream &o) const {
@@ -508,6 +514,10 @@ public:
 			std::max(std::abs(this->bounds.top), std::abs(this->bounds.bottom))
 		)*std::sqrt(2));
 		svg.raw("<defs>");
+		for (size_t i = 0; i < style.markers.size(); ++i) {
+			svg.tag("g").attr("id", style.markerId(i));
+			svg.raw(style.markers[i]).raw("</g>");
+		}
 		for (size_t i = 0; i < style.hatches.size(); ++i) {
 			auto &hatch = style.hatches[i];
 			if (!hatch.angles.size()) continue;
@@ -903,9 +913,15 @@ class Line2D : public SvgDrawable {
 	
 	Axis &axisX, &axisY;
 	std::vector<Point2D> points;
+	struct Marker {
+		Point2D point;
+		int shape;
+	};
+	std::vector<Marker> markers;
 	struct Frame {
 		double ratio;
 		std::vector<Point2D> points;
+		std::vector<Marker> markers;
 	};
 	std::vector<Frame> frames;
 	Point2D latest{0, 0};
@@ -932,9 +948,21 @@ public:
 		return addArray(std::forward<X>(x), std::forward<Y>(y), std::min<size_t>(x.size(), y.size()));
 	}
 	
+	Line2D & marker(double x, double y, int shape=-1) {
+		latest = {x, y};
+		markers.push_back({{x, y}, shape});
+		axisX.autoValue(x);
+		axisY.autoValue(y);
+		return *this;
+	}
+
+	/** Creates a frame, and starts again.
+		The frame takes all the current points, and will display from `ratio` time (0-1).
+ 		\image html animation.svg "Two lines with a different number of frames" */
 	Line2D & toFrame(double ratio) {
-		frames.push_back({ratio, points});
+		frames.push_back({ratio, points, markers});
 		points.clear();
+		markers.clear();
 		return *this;
 	}
 
@@ -1066,6 +1094,16 @@ public:
 		}
 		Point2D latest = points[closest];
 		return label(latest.x, latest.y, name, degrees, distance);
+	}
+	
+	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
+		for (auto marker : markers) {
+			svg.tag("use", true)
+				.attr("href", "#", style.markerId(marker.shape >= 0 ? marker.shape : styleIndex))
+				.attr("class", style.fillClass(styleIndex))
+				.attr("transform", "translate(", axisX.map(marker.point.x), " ", axisY.map(marker.point.y), ") scale(", style.markerSize, ")");
+		}
+		SvgDrawable::writeLabel(svg, style);
 	}
 	
 	void writeData(SvgWriter &svg, const PlotStyle &style) override {

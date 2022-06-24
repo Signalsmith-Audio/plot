@@ -121,7 +121,7 @@ public:
 		return "svg-plot-h" + std::to_string(counter.hatch%(int)hatches.size());
 	}
 	std::string markerId(const Counter &counter) const {
-		return "svg-plot-marker" + std::to_string(counter.marker%(int)markers.size());
+		return "svg-plot-marker" + std::to_string(std::abs(counter.marker)%(int)markers.size());
 	}
 	
 	void css(std::ostream &o) const {
@@ -488,8 +488,12 @@ public:
 	}
 
 	/// Takes ownership of the child
-	void addChild(SvgDrawable *child) {
-		children.emplace_back(child);
+	void addChild(SvgDrawable *child, bool front=false) {
+		if (front) {
+			children.emplace(children.begin(), child);
+		} else {
+			children.emplace_back(child);
+		}
 	}
 
 	virtual void writeData(SvgWriter &svg, const PlotStyle &style) {
@@ -1342,8 +1346,6 @@ public:
 
 	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
 		svg.raw("<g>");
-		SvgDrawable::writeLabel(svg, style);
-
 		for (auto &x : xAxes) {
 			double fromY = x->flipped ? size.top : size.bottom;
 			double toY = fromY + (x->flipped ? -style.tickV : style.tickV);
@@ -1366,6 +1368,7 @@ public:
 				}
 			}
 		}
+		SvgDrawable::writeLabel(svg, style);
 		svg.raw("</g>");
 	}
 
@@ -1451,7 +1454,7 @@ public:
 	*/
 	Legend & legend(double xRatio, double yRatio) {
 		Legend *legend = new Legend(*this, size, xRatio, yRatio);
-		this->addChild(legend);
+		this->addChild(legend, true);
 		return *legend;
 	}
 };

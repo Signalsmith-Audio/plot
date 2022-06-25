@@ -952,10 +952,11 @@ class Line2D : public SvgDrawable {
 	};
 	std::vector<Marker> markers;
 	struct Frame {
-		double ratio;
+		double time;
 		std::vector<Point2D> points;
 		std::vector<Marker> markers;
 	};
+	double framesEnd = 1;
 	std::vector<Frame> frames;
 	Point2D latest{0, 0};
 public:
@@ -990,12 +991,17 @@ public:
 	}
 
 	/** Creates a frame, and starts again.
-		The frame takes all the current points, and will display from `ratio` time (0-1).
+		The frame takes all the current points, and will display from
  		\image html animation.svg "Two lines with a different number of frames" */
-	Line2D & toFrame(double ratio) {
-		frames.push_back({ratio, points, markers});
+	Line2D & toFrame(double time) {
+		frames.push_back({time, points, markers});
 		points.clear();
 		markers.clear();
+		framesEnd = std::max(time, framesEnd);
+		return *this;
+	}
+	Line2D & maxFrame(double end) {
+		framesEnd = end;
 		return *this;
 	}
 
@@ -1141,6 +1147,7 @@ public:
 	
 	void writeData(SvgWriter &svg, const PlotStyle &style) override {
 		auto writePoints = [&](std::vector<Point2D> &points, bool fill) {
+			if (!points.size()) return;
 			svg.startPath();
 			for (auto &p : points) {
 				svg.addPoint(axisX.map(p.x), axisY.map(p.y));
@@ -1162,15 +1169,15 @@ public:
 			svg.endPath();
 		};
 		auto writeD = [&](bool fill){
+			auto &p = (points.size() || !frames.size()) ? points : frames.back().points;
 			svg.raw(" d=\"");
-			auto &p = points.size() || !frames.size() ? points : frames[0].points;
 			writePoints(p, fill);
 			if (frames.size() > 0) {
 				svg.animated = true;
 				svg.raw("\" data-animate-d=\"");
 				for (size_t i = 0; i < frames.size(); ++i) {
 					if (i > 0) svg.raw(";");
-					svg.write(frames[i].ratio).raw("@");
+					svg.write(frames[i].time/framesEnd).raw("@");
 					writePoints(frames[i].points, fill);
 				}
 			}

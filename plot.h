@@ -521,7 +521,7 @@ public:
 	virtual PlotStyle defaultStyle() const {
 		return {};
 	}
-
+	
 	void write(std::ostream &o, const PlotStyle &style) {
 		this->invalidateLayout();
 		this->layout(style);
@@ -636,7 +636,7 @@ public:
 		if (svg.animated || style.scriptSrc.size() > 0) svg.raw("</script>");
 		svg.raw("</svg>");
 	}
-	void write(std::string svgFile, const PlotStyle &style) {
+	void write(const std::string &svgFile, const PlotStyle &style) {
 		std::ofstream s(svgFile);
 		write(s, style);
 	}
@@ -644,8 +644,27 @@ public:
 	void write(std::ostream &o) {
 		this->write(o, this->defaultStyle());
 	}
-	void write(std::string svgFile) {
+	void write(const std::string &svgFile) {
 		write(svgFile, this->defaultStyle());
+	}
+	
+	/// Draws when this object goes out of scope
+	struct ScheduledWrite {
+		SvgFileDrawable &drawable;
+		PlotStyle style;
+		std::string svgFile;
+		
+		ScheduledWrite(SvgFileDrawable &drawable, const PlotStyle &style, const std::string &svgFile) : drawable(drawable), style(style), svgFile(svgFile) {}
+		ScheduledWrite(const ScheduledWrite &other) = delete;
+		ScheduledWrite(ScheduledWrite &&other) : drawable(other.drawable), style(other.style), svgFile(other.svgFile) {
+			other.svgFile = "";
+		};
+		~ScheduledWrite() {
+			if (svgFile.size() > 0) drawable.write(svgFile, style);
+		}
+	};
+	ScheduledWrite writeLater(const std::string &svgFile) {
+		return ScheduledWrite{*this, this->defaultStyle(), svgFile};
 	}
 };
 
@@ -1136,11 +1155,15 @@ public:
 	}
 	
 	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
+		double xMin = axisX.drawMin(), xMax = axisX.drawMax();
+		double yMin = axisY.drawMin(), yMax = axisY.drawMax();
 		for (auto marker : markers) {
+			double x = axisX.map(marker.point.x), y = axisY.map(marker.point.y);
+			if (x < xMin || x > xMax || y < yMin || y > yMax) continue;
 			svg.tag("use", true)
 				.attr("href", "#", style.markerId(marker.shape >= 0 ? marker.shape : styleIndex))
 				.attr("class", style.fillClass(styleIndex), " ", style.strokeClass(styleIndex))
-				.attr("transform", "translate(", axisX.map(marker.point.x), " ", axisY.map(marker.point.y), ")");
+				.attr("transform", "translate(", x, " ", y, ")");
 		}
 		SvgDrawable::writeLabel(svg, style);
 	}

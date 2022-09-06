@@ -40,7 +40,7 @@ public:
 	double padding = 10;
 	double lineWidth = 1.5, precision = 100;
 	double markerSize = 3.25;
-	double tickH = 4, tickV = 5;
+	double tickH = 4, tickV = 4;
 	// Text
 	double labelSize = 12, valueSize = 10;
 	double fontAspectRatio = 1; ///< scales size estimates, if using a particularly wide font
@@ -1366,7 +1366,7 @@ public:
 		}
 		for (auto &y : yAxes) {
 			double fromX = y->flipped ? size.right : size.left;
-			double toX = fromX + (y->flipped ? style.tickH : -style.tickV);
+			double toX = fromX + (y->flipped ? style.tickH : -style.tickH);
 			for (auto &t : y->tickList) {
 				if (t.name.size() && style.tickH != 0) {
 					double screenY = y->map(t.value);

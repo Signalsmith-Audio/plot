@@ -394,7 +394,7 @@ public:
 			raw(" ", round(prevPoint.x), " ", round(prevPoint.y));
 		}
 	}
-	void addPoint(double x, double y) {
+	void addPoint(double x, double y, bool alwaysInclude=false) {
 		if (std::isnan(x) || std::isnan(y)) return;
 		auto clip = clipStack.back();
 		/// Bitmask indicating which direction(s) the point is outside the bounds
@@ -402,6 +402,7 @@ public:
 			| (2*(clip.right < x))
 			| (4*(clip.top > y))
 			| (8*(clip.bottom < y));
+		if (alwaysInclude) mask = 0;
 		outOfBoundsMask &= mask;
 		if (!outOfBoundsMask) {
 			if (pointState == PointState::outOfBounds) {
@@ -1185,15 +1186,16 @@ public:
 			if (fill) {
 				if (fillToLine) {
 					auto &otherPoints = fillToLine->points;
-					for (auto it = otherPoints.rbegin(); it != otherPoints.rend(); ++it) {
-						svg.addPoint(fillToLine->axisX.map(it->x), fillToLine->axisY.map(it->y));
+					for (int i = otherPoints.size() - 1; i >= 0; --i) {
+						auto &p = otherPoints[i];
+						svg.addPoint(fillToLine->axisX.map(p.x), fillToLine->axisY.map(p.y), i == 0);
 					}
 				} else if (hasFillToX) {
-					svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points.back().y));
-					svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points[0].y));
+					svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points.back().y), true);
+					svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points[0].y), true);
 				} else if (hasFillToY) {
-					svg.addPoint(axisX.map(points.back().x), axisY.map(fillToPoint.y));
-					svg.addPoint(axisX.map(points[0].x), axisY.map(fillToPoint.y));
+					svg.addPoint(axisX.map(points.back().x), axisY.map(fillToPoint.y), true);
+					svg.addPoint(axisX.map(points[0].x), axisY.map(fillToPoint.y), true);
 				}
 			}
 			svg.endPath();

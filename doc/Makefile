@@ -14,7 +14,7 @@ doxygen:
 	doxygen Doxyfile-local
 
 	# Files linked from the README
-	cp ../plot.h html/plot.h
+	cp ../*.h html/
 	cp ../LICENSE.txt html/LICENSE.txt
 	mkdir -p html/doc/examples
 	cp examples.cpp html/doc/examples.cpp

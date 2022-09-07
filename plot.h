@@ -58,9 +58,12 @@ public:
 	std::vector<std::string> markers = {
 		"<circle cx=\"0\" cy=\"0\" r=\"1\" stroke=\"none\"/>",
 		"<path d=\"M0 0.9 -0.9 0 0 -0.9 0.9 0Z\" fill=\"#FFFA\" stroke-linejoin=\"miter\" stroke-width=\"0.6\"/>",
-		"<rect x=\"-0.9\" y=\"-0.9\" width=\"1.8\" height=\"1.8\" stroke=\"none\"/>",
+		"<path fill=\"none\" d=\"M0 -1.2 0 1.2 M -1.2 0 1.2 0\" stroke-width=\"0.7\"/>",
 		"<circle cx=\"0\" cy=\"0\" fill=\"#FFFA\" r=\"0.8\" stroke-width=\"0.65\"/>",
-		"<path stroke=\"none\" d=\"M0 -1.25 1.25 0.9 -1.25 0.9Z\"/>"
+		"<path stroke=\"none\" d=\"M0 -1.25 1.25 0.9 -1.25 0.9Z\"/>",
+		// spares:
+		//"<path fill=\"none\" d=\"M-0.9 -0.9 0.9 0.9 M -0.9 0.9 0.9 -0.9\" stroke-width=\"0.65\"/>",
+		//"<rect x=\"-0.9\" y=\"-0.9\" width=\"1.8\" height=\"1.8\" stroke=\"none\"/>",
 	};
 
 	struct Hatch {
@@ -519,7 +522,11 @@ public:
 class SvgFileDrawable : public SvgDrawable {
 public:
 	virtual PlotStyle defaultStyle() const {
-		return {};
+		PlotStyle result;
+#ifdef SIGNALSMITH_PLOT_DEFAULT_STYLE
+		SIGNALSMITH_PLOT_DEFAULT_STYLE((PlotStyle &)result);
+#endif
+		return result;
 	}
 	
 	void write(std::ostream &o, const PlotStyle &style) {
@@ -1602,6 +1609,8 @@ public:
 	PlotStyle defaultStyle() const override {
 		return style;
 	}
+	
+	Figure() : style(Grid::defaultStyle()) {}
 };
 
 static double estimateCharWidth(int c) {

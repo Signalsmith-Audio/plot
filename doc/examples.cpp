@@ -161,6 +161,8 @@ int main() {
 
 	{ // Grid
 		signalsmith::plot::Figure figure;
+		// Draws when this goes out of scope
+		auto scheduledWrite = figure.writeLater("grid.svg");
 
 		// Cell access with (col, row)
 		auto &mainPlot = figure(0, 0).plot(100, 100);
@@ -193,8 +195,6 @@ int main() {
 				line.add(std::sqrt(1 - x2*x2), x2);
 			}
 		}
-
-		figure.write("grid.svg");
 	}
 	
 	{ // Animation

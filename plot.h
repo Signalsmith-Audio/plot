@@ -773,11 +773,12 @@ public:
 		}
 		return *this;
 	}
-	/// Copy ticks/labels from another axis
-	Axis & copyFrom(Axis &other) {
+	/// Copy ticks/label from another axis, optionally removing their text
+	Axis & copyFrom(Axis &other, bool clearLabels=false) {
 		unitMap = other.unitMap;
-		for (auto &t : other.tickList) {
-			tickList.push_back(t);
+		for (Tick tick : other.tickList) {
+			if (clearLabels) tick.name = "";
+			tickList.push_back(tick);
 		}
 		autoMin = other.autoMin;
 		autoMax = other.autoMax;
@@ -788,7 +789,7 @@ public:
 			autoValue(t.value);
 		}
 		if (other._label.size()) this->_label = other._label;
-		for (auto o : linked) o->copyFrom(other);
+		for (auto o : linked) o->copyFrom(other, clearLabels);
 		return *this;
 	}
 	/// Link this axis to another, copying any ticks/labels set later as well
@@ -1420,11 +1421,12 @@ public:
 
 		// Add labels for axes
 		for (auto &x : xAxes) {
+			double xMin = x->drawMin() - 0.1, xMax = x->drawMax() + 0.1;
 			double alignment = (x->flipped ? -1 : 1), hasValues = x->tickList.size() ? 1 : 0;
 			double screenY = (x->flipped ? size.top : size.bottom) + alignment*(tv + hasValues*(style.valueSize*0.5 + style.textPadding));
 			for (auto &t : x->tickList) {
-				if (t.name.size()) {
-					double screenX = x->map(t.value);
+				double screenX = x->map(t.value);
+				if (t.name.size() && screenX >= xMin && screenX <= xMax) {
 					auto *label = new TextLabel({screenX, screenY}, 0, t.name, "svg-plot-value", false, true);
 					this->addLayoutChild(label);
 				}
@@ -1434,15 +1436,16 @@ public:
 				double midX = (x->drawMax() + x->drawMin())*0.5;
 				auto *label = new TextLabel({midX, labelY}, 0, x->label(), "svg-plot-label " + style.textClass(x->styleIndex), false, true);
 				this->addLayoutChild(label);
-			}
+		}
 		}
 		double longestLabelLeft = 0, longestLabelRight = 0;
 		for (auto &y : yAxes) {
+			double yMin = y->drawMin() - 0.1, yMax = y->drawMax() + 0.1;
 			double alignment = (y->flipped ? 1 : -1);
 			double screenX = (y->flipped ? size.right : size.left) + alignment*(th + style.textPadding);
 			for (auto &t : y->tickList) {
-				if (t.name.size()) {
-					double screenY = y->map(t.value);
+				double screenY = y->map(t.value);
+				if (t.name.size() && screenY >= yMin && screenY <= yMax) {
 					auto *label = new TextLabel({screenX, screenY}, alignment, t.name, "svg-plot-value", false, true);
 					this->addLayoutChild(label);
 

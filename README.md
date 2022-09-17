@@ -21,13 +21,13 @@ It's maintained mostly for internal Signalsmith Audio use, so I'm adding feature
 	* drops points along almost-straight lines
 * each plot's edge can have multiple partial axes
 * basic grid (each row/column stretches to contain its contents)
+* animated graphs with `<animate>` (SMIL)
 
 ### Limitations
 
 * only 2D plots supported
 * no automatic label placement or de-collision
 * text lengths are heuristically estimated
-* animations are currently JavaScript based
 
 ## How to use
 
@@ -79,8 +79,6 @@ See [examples.cpp](doc/examples.cpp) for code examples.  Here are the images gen
 ![Multiple axes](doc/examples/multiple-axes.svg)
 ![Legend](doc/examples/legend.svg)
 ![Grid](doc/examples/grid.svg)
-
-Open in a new tab to see the JS animation:
 ![Animation](doc/examples/animation.svg)
 
 ### API principles

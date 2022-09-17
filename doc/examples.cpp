@@ -201,23 +201,31 @@ int main() {
 		signalsmith::plot::Plot2D plot;
 		plot.x.linear(0, 10).major(0).minor(10);
 		plot.y.linear(-1, 1).major(0).minors(-1, 1);
+		auto &legend = plot.legend(2, 1);
 		{
 			auto &line = plot.line();
+			line.styleIndex.colour = 5;
 			for (double p = 0; p < 2*M_PI; p += 1) {
 				for (double x = 0; x < 10; x += 0.01) {
 					line.add(x, std::sin(x + p));
 				}
-				line.toFrame(p/(2*M_PI));
+				line.toFrame(p);
 			}
+			line.loopFrame(2*M_PI);
+			legend.add(line, "1 frame/rad");
 		}
 		{
 			auto &line = plot.line();
-			for (double p = 0; p < 2*M_PI; p += 0.1) {
+			line.styleIndex.colour = 3;
+			for (double p = 0; p < 2*M_PI; p += .1) {
 				for (double x = 0; x < 10; x += 0.01) {
 					line.add(x, std::sin(x + p));
 				}
-				line.toFrame(p/(2*M_PI));
+				line.toFrame(p);
 			}
+			line.loopFrame(2*M_PI);
+			line.fillToY(0);
+			legend.add(line, "10 frames/rad", true, true);
 		}
 		plot.write("animation.svg");
 	}

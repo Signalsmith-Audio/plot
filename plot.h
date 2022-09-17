@@ -324,16 +324,20 @@ public:
 	SvgWriter & pushClip(Bounds b, double dataCheckPadding) {
 		clipStack.push_back(b.pad(dataCheckPadding));
 
-		long clipId = idCounter++;
-		tag("clipPath").attr("id", "clip", clipId);
+		auto clipId = elementId("clip");
+		tag("clipPath").attr("id", clipId);
 		rect(b.left, b.top, b.width(), b.height());
 		raw("</clipPath>");
-		tag("g").attr("clip-path", "url(#clip", clipId, ")");
+		tag("g").attr("clip-path", "url(#", clipId, ")");
 		return *this;
 	}
 	SvgWriter & popClip() {
 		clipStack.resize(clipStack.size() - 1);
 		return raw("</g>");
+	}
+	
+	std::string elementId(std::string prefix) {
+		return prefix + std::to_string(idCounter++);
 	}
 	
 	/// XML tag helper, closing the tag when it's destroyed
@@ -599,49 +603,9 @@ public:
 		}
 		svg.raw("</style>");
 		if (style.scriptHref.size()) svg.tag("script", true).attr("href", style.scriptHref);
-		/*
-		(function(animationDuration) {
-			let animationPhase = 0;
-			let animations = [];
-			document.querySelectorAll("*[data-animate-d]").forEach(element => {
-				var frames = [], prevFrame = -1;
-				element.dataset.animateD.split(';').forEach(function (frame) {
-					let parts = frame.split("@");
-					frames.push({
-						r: parseFloat(parts[0]),
-						d: parts[1]
-					});
-				});
-				animations.push(function (r) {
-					var nextFrame = 0;
-					for (var f = 0; f != frames.length; ++f) {
-						if (frames[f].r <= r) nextFrame = f;
-					}
-					if (nextFrame != prevFrame) {
-						prevFrame = nextFrame;
-						element.setAttribute("d", frames[nextFrame].d);
-					}
-				});
-			});
-			let frameTime = Date.now();
-			function drawFrame() {
-				if (animationDuration > 0) {
-					let prev = frameTime;
-					frameTime = Date.now();
-					animationPhase += (frameTime - prev)*0.001/animationDuration;
-					animationPhase -= Math.floor(animationPhase);
-					for (var i = 0; i != animations.length; ++i) animations[i](animationPhase);
-				}
-
-				requestAnimationFrame(drawFrame);
-			}
-			drawFrame();
-		})(STYLE.ANIMATION);
-		*/
-		if (svg.animated || style.scriptSrc.size() > 0) svg.raw("<script>");
-		if (svg.animated) svg.raw("(function(k){function l(){if(k>0){var a=g;g=Date.now();c+=.001*(g-a)/k;c-=Math.floor(c);for(a=0;a!=h.length;++a)h[a](c)}requestAnimationFrame(l)}var c=0,h=[];document.querySelectorAll(\"*[data-animate-d]\").forEach(function(a){var d=[],m=-1;a.dataset.animateD.split(\";\").forEach(function(b){b=b.split(\"@\");d.push({r:parseFloat(b[0]),d:b[1]})});h.push(function(b){for(var e=0,f=0;f!=d.length;++f)d[f].r&lt;=b&amp;&amp;(e=f);e!=m&amp;&amp;(m=e,a.setAttribute(\"d\",d[e].d))})});var g=Date.now();l()})(").write(style.animation).raw(");");
-		svg.write(style.scriptSrc);
-		if (svg.animated || style.scriptSrc.size() > 0) svg.raw("</script>");
+		if (style.scriptSrc.size() > 0) {
+			svg.raw("<script>").write(style.scriptSrc).raw("</script>");
+		}
 		svg.raw("</svg>");
 	}
 	void write(const std::string &svgFile, const PlotStyle &style) {
@@ -984,7 +948,7 @@ class Line2D : public SvgDrawable {
 		std::vector<Point2D> points;
 		std::vector<Marker> markers;
 	};
-	double framesEnd = 1;
+	double framesLoopTime = 0;
 	std::vector<Frame> frames;
 	Point2D latest{0, 0};
 public:
@@ -1025,11 +989,12 @@ public:
 		frames.push_back({time, points, markers});
 		points.clear();
 		markers.clear();
-		framesEnd = std::max(time, framesEnd);
+		framesLoopTime = std::max(time, framesLoopTime);
 		return *this;
 	}
-	Line2D & maxFrame(double end) {
-		framesEnd = end;
+	/// Sets loop time (or < 0 to disable)
+	Line2D & loopFrame(double endTime) {
+		framesLoopTime = endTime;
 		return *this;
 	}
 
@@ -1206,20 +1171,44 @@ public:
 			svg.raw(" d=\"");
 			writePoints(p, fill);
 			if (frames.size() > 0) {
-				svg.animated = true;
-				svg.raw("\" data-animate-d=\"");
+				svg.raw("\">\n<animate")
+					.attr("attributeName", "d").attr("calcMode", "discrete");
+				double lastFrame = frames.back().time;
+				double framesEnd = std::max(framesLoopTime, lastFrame);
+				if (framesLoopTime > 0) {
+					svg.attr("dur", framesLoopTime, "s").attr("repeatCount", "indefinite");
+				} else {
+					svg.attr("dur", framesEnd);
+				}
+				svg.raw(" values=\"");
 				for (size_t i = 0; i < frames.size(); ++i) {
 					if (i > 0) svg.raw(";");
-					svg.write(frames[i].time/framesEnd).raw("@");
 					writePoints(frames[i].points, fill);
 				}
+				if (framesLoopTime > lastFrame) {
+					svg.raw(";");
+					writePoints(frames[0].points, fill);
+				}
+				svg.raw("\" keyTimes=\"");
+				for (size_t i = 0; i < frames.size(); ++i) {
+					if (i > 0) svg.raw(";");
+					svg.write(frames[i].time/framesEnd);
+				}
+				if (framesLoopTime > lastFrame) svg.raw(";1");
+				svg.raw("\"/></path>");
+			} else {
+				svg.raw("\"/>");
 			}
-			svg.raw("\"/>");
 		};
 		
+		std::string animationId;
 		if (_drawFill) {
 			svg.raw("<path")
 				.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
+			if (!frames.empty()) {
+				animationId = svg.elementId("anim");
+				svg.attr("id", animationId);
+			}
 			writeD(true);
 		}
 		if (_drawLine) {
@@ -1279,6 +1268,9 @@ public:
 	Legend & add(PlotStyle::Counter style, std::string name, bool stroke=true, bool fill=false, bool marker=false) {
 		entries.push_back(Entry{style, name, stroke, fill, marker});
 		return *this;
+	}
+	Legend & add(const Line2D &line2D, std::string name, bool stroke=true, bool fill=false, bool marker=false) {
+		return add(line2D.styleIndex, name, stroke, fill, marker);
 	}
 	Legend & line(PlotStyle::Counter style, std::string name) {
 		return add(style, name, true, false, false);

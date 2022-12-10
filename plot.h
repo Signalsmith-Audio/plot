@@ -443,6 +443,7 @@ public:
 				if (pointState == PointState::pendingLine) {
 					raw(" ", round(prevPoint.x), " ", round(prevPoint.y));
 				}
+				raw(" ", round(x), " ", round(y)); // Draw the first out-of-bounds point
 				pointState = PointState::outOfBounds;
 			}
 		}
@@ -1244,11 +1245,12 @@ public:
 		double width = exampleLineWidth + style.textPadding*3 + longestLabel*style.labelSize;
 		double height = style.textPadding*2 + entries.size()*style.labelSize*style.lineHeight;
 		
-		double extraW = dataBounds.width() - width;
-		double extraH = dataBounds.height() - height;
+		Bounds dataInset = dataBounds.pad(-style.tickH, -style.tickV);
+		double extraW = dataInset.width() - width;
+		double extraH = dataInset.height() - height;
 		Point2D topLeft = {
-			dataBounds.left + extraW*std::max(0.0, std::min(1.0, rx)),
-			dataBounds.bottom - height - extraH*std::max(0.0, std::min(1.0, ry))
+			dataInset.left + extraW*std::max(0.0, std::min(1.0, rx)),
+			dataInset.bottom - height - extraH*std::max(0.0, std::min(1.0, ry))
 		};
 		if (rx < 0) topLeft.x += (refBounds.left - width - topLeft.x)*-rx;
 		if (rx > 1) topLeft.x += (refBounds.right - topLeft.x)*(rx - 1);

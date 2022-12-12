@@ -98,6 +98,15 @@ Many methods return a reference to the object, allowing you to chain them togeth
 plot.x.major(0, 10).minor(5);
 ```
 
+### Heat maps
+
+There's an [additional module](file:///Users/geraint/Development/plot/doc/html/group___heat-_map.html) in `heatmap.h` for pixel-based heat-maps:
+
+![Heat-map](doc/examples/embedded-heat-map.svg)
+![Heat-map with scale](doc/examples/embedded-heat-map-with-scale.svg)
+
+The colour map is (currently) not customisable.
+
 ## Development
 
 ### Testing

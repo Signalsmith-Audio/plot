@@ -178,8 +178,8 @@ public:
 			.svg-plot-value, .svg-plot-label {
 				font-family: Arial,sans-serif;
 				fill: #000;
-				stroke: #FFFFFF80;
-				stroke-width: 2px;
+				stroke: #FFFFFF48;
+				stroke-width: 2.5px;
 				paint-order: stroke fill;
 				text-anchor: middle;
 				dominant-baseline: central;
@@ -1322,6 +1322,31 @@ public:
 	}
 };
 
+class Image : public SvgDrawable {
+	Axis &x, &y;
+	Bounds dataBounds;
+	std::string url;
+public:
+	Image(Axis &x, Axis &y, Bounds dataBounds, const std::string &url) : x(x), y(y), dataBounds(dataBounds), url(url) {
+		// Add the image to automatic bounds
+		x.autoValue(dataBounds.left);
+		x.autoValue(dataBounds.right);
+		y.autoValue(dataBounds.top);
+		y.autoValue(dataBounds.bottom);
+	}
+
+	void writeData(SvgWriter &svg, const PlotStyle &style) override {
+		SvgDrawable::writeData(svg, style);
+		double drawLeft = x.map(dataBounds.left);
+		double drawRight = x.map(dataBounds.right);
+		double drawTop = y.map(dataBounds.top);
+		double drawBottom = y.map(dataBounds.bottom);
+		svg.tag("image", true).attr("width", 1).attr("height", 1)
+			.attr("transform", "translate(", drawLeft, ",", drawTop, ")scale(", drawRight - drawLeft, ",", drawBottom - drawTop, ")")
+			.attr("preserveAspectRatio", "none").attr("href", url);
+	}
+};
+
 class Plot2D : public SvgFileDrawable {
 	std::string plotTitle;
 	std::vector<std::unique_ptr<Axis>> xAxes, yAxes;
@@ -1492,6 +1517,18 @@ public:
 		Legend *legend = new Legend(*this, size, xRatio, yRatio);
 		this->addChild(legend, true);
 		return *legend;
+	}
+	
+	Image & image(Axis &x, Axis &y, Bounds dataBounds, const std::string &url) {
+		Image *image = new Image(x, y, dataBounds, url);
+		this->addChild(image);
+		return *image;
+	}
+	Image & image(Bounds dataBounds, const std::string &url) {
+		return image(x, y, dataBounds, url);
+	}
+	Image & image(double left, double right, double top, double bottom, const std::string &url) {
+		return image(Bounds{left, right, top, bottom}, url);
 	}
 };
 

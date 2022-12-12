@@ -1,4 +1,5 @@
 #include "../plot.h"
+#include "../heatmap.h"
 
 #include <cmath>
 #include <algorithm>
@@ -228,6 +229,59 @@ int main() {
 			legend.add(line, "10 frames/rad", true, true);
 		}
 		plot.write("animation.svg");
+	}
+
+	{ // Embedded image
+		signalsmith::plot::Plot2D plot(100, 100);
+		plot.x.linear(-1, 1).major(0).minors(-1, 1);
+		plot.y.copyFrom(plot.x);
+		plot.image({-1, 1, 1, -1}, "https://signalsmith-audio.co.uk/style/images/logo-v3/square@2x.png");
+		plot.write("embedded-image.svg");
+	}
+
+	{ // Embedded heat-map
+		signalsmith::plot::Plot2D plot(200, 150);
+		plot.x.linear(-1, 1).major(0).minors(-1, 1);
+		plot.y.copyFrom(plot.x);
+		
+		auto &line = plot.line(-1);
+		line.marker(0, 0).label("label", 0, 10);
+		line.marker(-0.4, -0.25).label("angled label", 30, 15);
+		
+		signalsmith::plot::HeatMap heatMap(101, 101);
+		heatMap.scale.linear(2, 0);
+		heatMap.addTo(plot);
+		for (int x = 0; x <= 100; ++x) {
+			for (int y = 0; y <= 100; ++y) {
+				double sx = x/100.0;
+				double sy = y/100.0;
+				heatMap(x, y) = sx + sy;
+			}
+		}
+		heatMap.write("heat-map.png");
+		
+		plot.write("embedded-heat-map.svg");
+	}
+
+	{ // Heat-map with automatically added scale
+		signalsmith::plot::HeatMap heatMap(201, 201);
+		heatMap.scale.linear(0, 1).minors(0, 0.5, 1);
+
+		signalsmith::plot::Figure figure;
+		auto &plot = heatMap.addTo(figure, 120, 120);
+		plot.x.linear(-1, 1).blank();
+		plot.y.copyFrom(plot.x);
+		
+		for (int x = 0; x <= 200; ++x) {
+			for (int y = 0; y <= 200; ++y) {
+				double sx = x/100.0 - 1;
+				double sy = y/100.0 - 1;
+				
+				double d2 = sx*sx + 2*sy*sy - 2*sx*sy;
+				heatMap(x, y) = std::exp(-2*d2);
+			}
+		}
+		figure.write("embedded-heat-map-with-scale.svg");
 	}
 }
 

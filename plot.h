@@ -526,6 +526,20 @@ public:
 		}
 	}
 
+	/** Creates a frame from the current stat, and optionally clears the state ready for the next frame.
+		The time is the start-time of the frame being created.
+ 		\image html animation.svg "Two lines with a different number of frames" */
+	virtual void toFrame(double time, bool clear=true) {
+		for (auto &c : children) c->toFrame(time, clear);
+	}
+	/// Sets loop time (or < 0 to disable)
+	virtual void loopFrame(double loopTime) {
+		for (auto &c : children) c->loopFrame(loopTime);
+	}
+	/// Removes all animation frames.  Mostly useful if re-using the diagram for multiple animations.
+	virtual void clearFrames() {
+		for (auto &c : children) c->clearFrames();
+	}
 };
 
 /// Top-level objects which can generate SVG files
@@ -1013,20 +1027,23 @@ public:
 		return *this;
 	}
 
-	/** Creates a frame, and starts again.
-		The frame takes all the current points, and will display from
- 		\image html animation.svg "Two lines with a different number of frames" */
-	Line2D & toFrame(double time) {
+	void toFrame(double time, bool clear=true) override {
+		SvgDrawable::toFrame(time, clear);
 		frames.push_back({time, points, markers});
-		points.clear();
-		markers.clear();
+		if (clear) {
+			points.clear();
+			markers.clear();
+		}
 		framesLoopTime = std::max(time, framesLoopTime);
-		return *this;
 	}
-	/// Sets loop time (or < 0 to disable)
-	Line2D & loopFrame(double endTime) {
+	void loopFrame(double endTime) override {
+		SvgDrawable::loopFrame(endTime);
 		framesLoopTime = endTime;
-		return *this;
+	}
+	void clearFrames() override {
+		SvgDrawable::clearFrames();
+		frames.resize(0);
+		framesLoopTime = 0;
 	}
 
 	/// @{
@@ -1684,6 +1701,19 @@ public:
 		}
 		items.emplace_back(column, row);
 		return *(items.back().cell);
+	}
+
+	void toFrame(double time, bool clear=true) override {
+		Cell::toFrame(time, clear);
+		for (auto &c : items) c.cell->toFrame(time, clear);
+	}
+	void loopFrame(double loopTime) override {
+		Cell::loopFrame(loopTime);
+		for (auto &c : items) c.cell->loopFrame(loopTime);
+	}
+	void clearFrames() override {
+		Cell::clearFrames();
+		for (auto &c : items) c.cell->clearFrames();
 	}
 };
 

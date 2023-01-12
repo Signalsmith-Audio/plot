@@ -126,6 +126,10 @@ public:
 	std::string markerId(const Counter &counter) const {
 		return "svg-plot-marker" + std::to_string(std::abs(counter.marker)%(int)markers.size());
 	}
+	const std::string & markerRaw(const Counter &counter) const {
+		int index = std::abs(counter.marker)%(int)markers.size();
+		return markers[index];
+	}
 	
 	void css(std::ostream &o) const {
 		o << cssPrefix;
@@ -562,7 +566,7 @@ public:
 		svg.raw("<defs>");
 		for (size_t i = 0; i < style.markers.size(); ++i) {
 			svg.tag("g").attr("id", style.markerId(i)).attr("class", "svg-plot-marker");
-			svg.raw(style.markers[i]).raw("</g>");
+			svg.raw(style.markerRaw(i)).raw("</g>");
 		}
 		for (size_t i = 0; i < style.hatches.size(); ++i) {
 			auto &hatch = style.hatches[i];
@@ -952,6 +956,32 @@ class Line2D : public SvgDrawable {
 	double framesLoopTime = 0;
 	std::vector<Frame> frames;
 	Point2D latest{0, 0};
+	
+	template<class WriteValue>
+	void writeAnimationAttrs(SvgWriter &svg, WriteValue &&writeValue) {
+		double lastFrame = frames.back().time;
+		double framesEnd = std::max(framesLoopTime, lastFrame);
+		if (framesLoopTime > 0) {
+			svg.attr("dur", framesLoopTime, "s").attr("repeatCount", "indefinite");
+		} else {
+			svg.attr("dur", framesEnd);
+		}
+		svg.raw(" values=\"");
+		for (size_t i = 0; i < frames.size(); ++i) {
+			if (i > 0) svg.raw(";");
+			writeValue(i);
+		}
+		if (framesLoopTime > lastFrame) {
+			svg.raw(";");
+			writeValue(0);
+		}
+		svg.raw("\" keyTimes=\"");
+		for (size_t i = 0; i < frames.size(); ++i) {
+			if (i > 0) svg.raw(";");
+			svg.write(frames[i].time/framesEnd);
+		}
+		if (framesLoopTime > lastFrame) svg.raw(";1");
+	}
 public:
 	PlotStyle::Counter styleIndex;
 
@@ -1132,13 +1162,55 @@ public:
 	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
 		double xMin = axisX.drawMin(), xMax = axisX.drawMax();
 		double yMin = axisY.drawMin(), yMax = axisY.drawMax();
-		for (auto marker : markers) {
-			double x = axisX.map(marker.point.x), y = axisY.map(marker.point.y);
-			if (x < xMin || x > xMax || y < yMin || y > yMax) continue;
-			svg.tag("use", true)
-				.attr("href", "#", style.markerId(marker.shape >= 0 ? marker.shape : styleIndex))
-				.attr("class", style.fillClass(styleIndex), " ", style.strokeClass(styleIndex))
-				.attr("transform", "translate(", x, " ", y, ")");
+		size_t maxMarkers = markers.size();
+		bool animated = (frames.size() > 0);
+		for (auto &frame : frames) {
+			maxMarkers = std::max(maxMarkers, frame.markers.size());
+		}
+		static constexpr double outOfRange = -10000;
+		for (size_t m = 0; m < maxMarkers; ++m) {
+			double x = outOfRange, y = outOfRange;
+			auto shape = styleIndex;
+
+			if (m < markers.size()) {
+				auto &marker = markers[m];
+				x = axisX.map(marker.point.x);
+				y = axisY.map(marker.point.y);
+				if (x < xMin || x > xMax || y < yMin || y > yMax) {
+					x = y = outOfRange;
+				}
+				if (marker.shape >= 0) shape = marker.shape;
+			}
+			if (animated || x != outOfRange || y != outOfRange) {
+				if (!animated) {
+					svg.tag("use", true)
+						.attr("href", "#", style.markerId(shape))
+						.attr("class", style.fillClass(styleIndex), " ", style.strokeClass(styleIndex))
+						.attr("transform", "translate(", x, " ", y, ")");
+				} else {
+					svg.tag("g")
+						.attr("class", style.fillClass(styleIndex), " ", style.strokeClass(styleIndex), "")
+						.attr("transform", "translate(", x, " ", y, ")");
+					svg.tag("g").attr("class", "svg-plot-marker");
+					svg.raw(style.markerRaw(shape)).raw("</g>");
+
+					svg.raw("<animateTransform").attr("calcMode", "discrete")
+						.attr("attributeName", "transform").attr("attributeType", "XML")
+						.attr("type", "translate");
+					writeAnimationAttrs(svg, [&](int index) {
+						double x = outOfRange, y = outOfRange;
+						if (m < frames[index].markers.size()) {
+							x = axisX.map(frames[index].markers[m].point.x);
+							y = axisY.map(frames[index].markers[m].point.y);
+							if (x < xMin || x > xMax || y < yMin || y > yMax) {
+								x = y = outOfRange;
+							}
+						}
+						svg.raw(x, " ", y);
+					});
+					svg.raw("\"/></g>");
+				}
+			}
 		}
 		SvgDrawable::writeLabel(svg, style);
 	}
@@ -1174,42 +1246,18 @@ public:
 			if (frames.size() > 0) {
 				svg.raw("\">\n<animate")
 					.attr("attributeName", "d").attr("calcMode", "discrete");
-				double lastFrame = frames.back().time;
-				double framesEnd = std::max(framesLoopTime, lastFrame);
-				if (framesLoopTime > 0) {
-					svg.attr("dur", framesLoopTime, "s").attr("repeatCount", "indefinite");
-				} else {
-					svg.attr("dur", framesEnd);
-				}
-				svg.raw(" values=\"");
-				for (size_t i = 0; i < frames.size(); ++i) {
-					if (i > 0) svg.raw(";");
+				writeAnimationAttrs(svg, [&](size_t i) {
 					writePoints(frames[i].points, fill);
-				}
-				if (framesLoopTime > lastFrame) {
-					svg.raw(";");
-					writePoints(frames[0].points, fill);
-				}
-				svg.raw("\" keyTimes=\"");
-				for (size_t i = 0; i < frames.size(); ++i) {
-					if (i > 0) svg.raw(";");
-					svg.write(frames[i].time/framesEnd);
-				}
-				if (framesLoopTime > lastFrame) svg.raw(";1");
+				});
 				svg.raw("\"/></path>");
 			} else {
 				svg.raw("\"/>");
 			}
 		};
 		
-		std::string animationId;
 		if (_drawFill) {
 			svg.raw("<path")
 				.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
-			if (!frames.empty()) {
-				animationId = svg.elementId("anim");
-				svg.attr("id", animationId);
-			}
 			writeD(true);
 		}
 		if (_drawLine) {
@@ -1555,9 +1603,9 @@ class Grid : public Cell {
 	int _colMax = 0, _colMin = 0, _rowMax = 0, _rowMin = 0;
 	struct Item {
 		int column, row;
-		std::unique_ptr<Cell> cell;
+		std::unique_ptr<Grid> cell;
 		Point2D transpose = {0, 0};
-		Item(int column, int row) : column(column), row(row), cell(new Cell()) {}
+		Item(int column, int row) : column(column), row(row), cell(new Grid()) {}
 	};
 	std::vector<Item> items;
 
@@ -1624,7 +1672,7 @@ public:
 	int columns() const {
 		return _colMax - _colMin;
 	}
-	Cell & operator ()(int column, int row) {
+	Grid & operator ()(int column, int row) {
 		_colMin = std::min(_colMin, column);
 		_colMax = std::max(_colMax, column);
 		_rowMin = std::min(_rowMin, row);

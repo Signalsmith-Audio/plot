@@ -200,7 +200,7 @@ int main() {
 	
 	{ // Animation
 		signalsmith::plot::Plot2D plot;
-		plot.x.linear(0, 10).major(0).minor(10);
+		plot.x.linear(0, 10).major(0).minor(10).minor(5);
 		plot.y.linear(-1, 1).major(0).minors(-1, 1);
 		auto &legend = plot.legend(2, 1);
 		{
@@ -210,6 +210,7 @@ int main() {
 				for (double x = 0; x < 10; x += 0.01) {
 					line.add(x, std::sin(x + p));
 				}
+				line.marker(5, std::sin(5 + p));
 				line.toFrame(p);
 			}
 			line.loopFrame(2*M_PI);

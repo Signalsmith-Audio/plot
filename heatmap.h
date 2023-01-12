@@ -66,21 +66,22 @@ namespace signalsmith { namespace plot {
 	You create this separately, and then attach to a `Figure` or `Plot` later, or save directly to PNG.
  */
 struct HeatMap {
-	HeatMap(int width, int height, bool flipped=false) : scale(flipped, !flipped), width(width), height(height) {
+	HeatMap(int width, int height, bool flipped=false) : HeatMap(width, height, width, height, flipped) {}
+	HeatMap(int width, int height, int outputWidth, int outputHeight, bool flipped=false) : scale(flipped, !flipped), width(width), height(height), outputWidth(outputWidth), outputHeight(outputHeight) {
 		unitValues.assign(width*height, 0);
 	}
 	
 	Axis scale;
 	
 	void write(std::string pngFile) {
-		updateData();
+		renderBytes();
 		
 		std::ofstream output(pngFile);
 		output.write((char *)pngBytes.data(), pngBytes.size());
 	}
 	
 	std::string dataUrl() {
-		updateData();
+		renderBytes();
 
 		const char *base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 		std::stringstream str;
@@ -102,9 +103,11 @@ struct HeatMap {
 	}
 	
 	double & operator()(int x, int y) {
+		if (x < 0 || x >= width || y < 0 || y >= height) return dummyValue;
 		return unitValues[x + y*width];
 	}
 	const double & operator()(int x, int y) const {
+		if (x < 0 || x >= width || y < 0 || y >= height) return dummyValue;
 		return unitValues[x + y*width];
 	}
 
@@ -124,6 +127,7 @@ struct HeatMap {
 			double drawTop = fullBounds ? y.drawMin() : y.map(dataBounds.top);
 			double drawBottom = fullBounds ? y.drawMax() : y.map(dataBounds.bottom);
 			if (flippedY) std::swap(drawTop, drawBottom);
+
 			svg.tag("image", true).attr("width", 1).attr("height", 1)
 				.attr("transform", "translate(", drawLeft, ",", drawTop, ")scale(", drawRight - drawLeft, ",", drawBottom - drawTop, ")")
 				.attr("preserveAspectRatio", "none").attr("href", heatMap.dataUrl());
@@ -183,8 +187,9 @@ private:
 		scalePlot.y.linkFrom(scale).flip();
 	}
 
-	int width, height;
+	int width, height, outputWidth, outputHeight;
 	std::vector<double> unitValues;
+	double dummyValue;
 	
 	void colourMap(double v, uint8_t *rgb) {
 		// RGB-packed colour map
@@ -204,10 +209,33 @@ private:
 
 	// PNG file contents
 	std::vector<uint8_t> pngBytes;
-	void updateData() {
+	void renderBytes() {
+		double scaleX = outputWidth > 1 ? (width - 1.0)/(outputWidth - 1.0) : (width - 1.0);
+		double scaleY = outputHeight > 1 ? (height - 1.0)/(outputHeight - 1.0) : (height - 1.0);
+		auto getScaledPixel = [&](int outX, int outY) {
+			double scaledSum = 0, counter = 0;
+			double inX = outX*scaleX;
+			double inY = outY*scaleY;
+			// Bidirectional interpolation, scaling up or down
+			double spanX = std::max(1.0, scaleX), spanY = std::max(1.0, scaleY);
+			for (int x = std::max<int>(0, std::ceil(inX - spanX)); x < std::min<int>(width, std::floor(inX + spanX)); ++x) {
+				double wx = 1 - std::abs(x - inX)/spanX;
+				wx *= wx*(3 - 2*wx);
+				for (int y = std::max<int>(0, std::ceil(inY - spanY)); y < std::min<int>(height, std::floor(inY + spanY)); ++y) {
+					double wy = 1 - std::abs(y - inY)/spanY;
+					wy *= wy*(3 - 2*wy);
+					double w = wx*wy;
+					double v = std::max(0.0, std::min(1.0, scale.map((*this)(x, y))));
+					scaledSum += v*w;
+					counter += w;
+				}
+			}
+			return scaledSum/counter;
+		};
+	
 		pngBytes.resize(0);
 		addBytes("\x89PNG\x0D\x0A\x1A\x0A", 8);
-		startChunk("IHDR").addInt32(width).addInt32(height);
+		startChunk("IHDR").addInt32(outputWidth).addInt32(outputHeight);
 		// 8-bits, palette, compression=0=DEFLATE, filter=0=per-scanline, interlace=0
 		addBytes("\x08\x03\x00\x00\x00", 5).endChunk();
 
@@ -221,23 +249,21 @@ private:
 
 		// Image data
 		startChunk("IDAT").startDeflate();
-		std::vector<unsigned char> rowBytes(width + 1), prevBytes(width + 1);
+		std::vector<unsigned char> rowBytes(outputWidth + 1), prevBytes(outputWidth + 1);
 		rowBytes[0] = 3; // "average" filter (left and up)
-		for (int y = 0; y < height; ++y) {
+		for (int y = 0; y < outputHeight; ++y) {
 			uint8_t leftByte = 0;
 			double remainder = 0;
-			for (int x = 0; x < width; ++x) {
-				double unitValue = (*this)(x, y);
-				double v = scale.map(unitValue)*255 + remainder;
+			for (int x = 0; x < outputWidth; ++x) {
+				double v = getScaledPixel(x, y)*255 + remainder;
 				int v8 = std::round(v);
 				remainder = v - v8; // simple dither
 				uint8_t byte = std::max(0, std::min(255, v8));
 				uint8_t predicted = (leftByte + prevBytes[x + 1])/2;
 				rowBytes[x + 1] = (byte - predicted);
-				prevBytes[x + 1] = byte;
-				leftByte = byte;
+				leftByte = prevBytes[x + 1] = byte;
 			}
-			deflate(rowBytes.data(), rowBytes.size(), y == height - 1);
+			deflate(rowBytes.data(), rowBytes.size(), y == outputHeight - 1);
 		}
 		endDeflate().endChunk();
 		startChunk("IEND").endChunk();

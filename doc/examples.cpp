@@ -260,12 +260,13 @@ int main() {
 			}
 		}
 		heatMap.write("heat-map.png");
-		
+
 		plot.write("embedded-heat-map.svg");
 	}
 
-	{ // Heat-map with automatically added scale
+	for (int i = 0; i < 2; ++i){ // Heat-map with automatically added scale
 		signalsmith::plot::HeatMap heatMap(201, 201);
+		heatMap.light = (i == 1);
 		heatMap.scale.linear(0, 1).minors(0, 0.5, 1);
 
 		signalsmith::plot::Figure figure;
@@ -282,7 +283,7 @@ int main() {
 				heatMap(x, y) = std::exp(-2*d2);
 			}
 		}
-		figure.write("embedded-heat-map-with-scale.svg");
+		figure.write("embedded-heat-map-with-scale" + std::string(heatMap.light ? "-light" : "") + ".svg");
 	}
 }
 

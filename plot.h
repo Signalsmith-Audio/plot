@@ -443,7 +443,7 @@ public:
 				pointState = PointState::singlePoint;
 			}
 			outOfBoundsMask = mask;
-			if (outOfBoundsMask) {
+			if (outOfBoundsMask && pointState != PointState::start) {
 				if (pointState == PointState::pendingLine) {
 					raw(" ", round(prevPoint.x), " ", round(prevPoint.y));
 				}
@@ -985,7 +985,7 @@ class Line2D : public SvgDrawable {
 			if (i > 0) svg.raw(";");
 			writeValue(i);
 		}
-		if (framesLoopTime > lastFrame) {
+		if (framesLoopTime > lastFrame || smoothFrame) {
 			svg.raw(";");
 			writeValue(0);
 		}
@@ -994,7 +994,7 @@ class Line2D : public SvgDrawable {
 			if (i > 0) svg.raw(";");
 			svg.write(frames[i].time/framesEnd);
 		}
-		if (framesLoopTime > lastFrame) svg.raw(";1");
+		if (framesLoopTime > lastFrame || smoothFrame) svg.raw(";1");
 	}
 public:
 	PlotStyle::Counter styleIndex;
@@ -1045,6 +1045,7 @@ public:
 		frames.resize(0);
 		framesLoopTime = 0;
 	}
+	bool smoothFrame = false;
 
 	/// @{
 	///@name Draw config
@@ -1237,7 +1238,7 @@ public:
 			if (!points.size()) return;
 			svg.startPath();
 			for (auto &p : points) {
-				svg.addPoint(axisX.map(p.x), axisY.map(p.y));
+				svg.addPoint(axisX.map(p.x), axisY.map(p.y), smoothFrame);
 			}
 			if (fill) {
 				if (fillToLine) {
@@ -1262,7 +1263,7 @@ public:
 			writePoints(p, fill);
 			if (frames.size() > 0) {
 				svg.raw("\">\n<animate")
-					.attr("attributeName", "d").attr("calcMode", "discrete");
+					.attr("attributeName", "d").attr("calcMode", smoothFrame ? "linear" : "discrete");
 				writeAnimationAttrs(svg, [&](size_t i) {
 					writePoints(frames[i].points, fill);
 				});

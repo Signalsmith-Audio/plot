@@ -72,6 +72,7 @@ struct HeatMap {
 	}
 	
 	Axis scale;
+	bool light = false;
 	
 	void write(std::string pngFile) {
 		renderBytes();
@@ -148,7 +149,7 @@ struct HeatMap {
 	Plot2D & addTo(Plot2D &plot, Bounds dataBounds, Plot2D &scalePlot) {
 		auto *embedded = new EmbeddedHeatMap(*this, plot.x, plot.y, dataBounds);
 		plot.addChild(embedded);
-		addToScalePlot(scalePlot);
+		addScaleTo(scalePlot);
 		return plot;
 	}
 
@@ -161,8 +162,26 @@ struct HeatMap {
 	Plot2D & addTo(Plot2D &plot, Plot2D &scalePlot, bool flippedY=true) {
 		auto *embedded = new EmbeddedHeatMap(*this, plot.x, plot.y, flippedY);
 		plot.addChild(embedded);
-		addToScalePlot(scalePlot);
+		addScaleTo(scalePlot);
 		return plot;
+	}
+	
+	Plot2D & addScaleTo(Plot2D &scalePlot) {
+		struct RetainedMap : public SvgDrawable {
+			RetainedMap(HeatMap *map) : map(map) {}
+			std::unique_ptr<HeatMap> map;
+		};
+
+		// Create and retain a colour map image
+		auto *scaleMap = new HeatMap(1, 256);
+		scaleMap->light = light;
+		for (int y = 0; y < 256; ++y) (*scaleMap)(0, y) = y/255.0;
+		scalePlot.addChild(new RetainedMap(scaleMap));
+
+		auto *embeddedScale = new EmbeddedHeatMap(*scaleMap, scalePlot.x, scalePlot.y);
+		scalePlot.addChild(embeddedScale);
+		scalePlot.y.linkFrom(scale).flip();
+		return scalePlot;
 	}
 
 	/// Adds data and scale plots to a grid (e.g. a figure), returning the data plot
@@ -171,30 +190,17 @@ struct HeatMap {
 	}
 
 private:
-	void addToScalePlot(Plot2D &scalePlot) {
-		struct RetainedMap : public SvgDrawable {
-			RetainedMap(HeatMap *map) : map(map) {}
-			std::unique_ptr<HeatMap> map;
-		};
-
-		// Create and retain a colour map image
-		auto *scaleMap = new HeatMap(1, 256);
-		for (int y = 0; y < 256; ++y) (*scaleMap)(0, y) = y/255.0;
-		scalePlot.addChild(new RetainedMap(scaleMap));
-
-		auto *embeddedScale = new EmbeddedHeatMap(*scaleMap, scalePlot.x, scalePlot.y);
-		scalePlot.addChild(embeddedScale);
-		scalePlot.y.linkFrom(scale).flip();
-	}
 
 	int width, height, outputWidth, outputHeight;
 	std::vector<double> unitValues;
 	double dummyValue;
 	
-	void colourMap(double v, uint8_t *rgb) {
-		// RGB-packed colour map
-		double rgb1[51] = {0,0,0,0.1,0.1,0.08,0.204,0.1561,0.1154,0.3303,0.1489,0.132,0.4903,0.1289,0.1412,0.5584,0.15,0.2393,0.552,0.188,0.5,0.4351,0.2853,0.6354,0.3264,0.3979,0.7697,0.1107,0.5283,0.8896,0,0.604,0.9378,0.0606,0.7257,0.5554,0.2485,0.8033,0.137,0.6381,0.8057,0.0459,1,0.7994,0,1,0.9264,0.4412,1,1,1};
-		v *= (5 - v)/4; // warp the scale slightly, since our colour-map skews dark
+	static void colourMap(double v, uint8_t *rgb) {
+#ifdef SIGNALSMITH_HEATMAP_RGB
+		SIGNALSMITH_HEATMAP_RGB(v, rgb);
+#else
+		// cubehelix (by Dave Green) with start=1.5, rotations=1.25, rotation=negative, hue=1.8, gamma=0.8, 17 points
+		double rgb1[51] = {0,0,0,0.114,0.054,0,0.279,0.067,0.017,0.433,0.068,0.161,0.518,0.09,0.377,0.509,0.158,0.607,0.418,0.277,0.783,0.291,0.434,0.856,0.193,0.598,0.814,0.175,0.736,0.689,0.262,0.825,0.544,0.439,0.859,0.445,0.658,0.854,0.442,0.857,0.84,0.543,0.985,0.849,0.714,1,0.903,0.888,1,1,1};
 		
 		double index = v*16;
 		int lowIndex = std::min(std::floor(index), 15.0);
@@ -204,6 +210,7 @@ private:
 		for (int c = 0; c < 3; ++c) {
 			rgb[c] = std::round(255*std::sqrt(rgbLow[c]*rgbLow[c]*rL + rgbLow[c + 3]*rgbLow[c + 3]*rH));
 		}
+#endif
 		return;
 	}
 
@@ -242,7 +249,9 @@ private:
 		startChunk("PLTE");
 		unsigned char rgb[3];
 		for (int i = 0; i < 256; ++i) {
-			colourMap(i/255.0, rgb);
+			double v = i/255.0;
+			if (light) v = 1 - v;
+			colourMap(v, rgb);
 			addBytes((char *)rgb, 3);
 		}
 		endChunk();

@@ -595,9 +595,11 @@ public:
 			double spacing = style.hatchSpacing*hatch.spaceScale;
 			svg.tag("pattern").attr("patternUnits", "userSpaceOnUse")
 				.attr("id", "svg-plot-hatch", i, "-pattern").attr("class", "svg-plot-hatch")
-				.attr("x", 0).attr("y", 0).attr("width", 10).attr("height", spacing)
+				.attr("x", 0).attr("y", 0).attr("width", 10).attr("height", spacing);
+			svg.tag("line", true).attr("x1", -1).attr("x2", 11).attr("y1", spacing*0.5).attr("y2", spacing*0.5)
 				.attr("stroke", "#FFF").attr("fill", "none");
-			svg.line(-1, spacing*0.5, 11, spacing*0.5);
+			svg.tag("rect", true).attr("x", -1).attr("y", -1).attr("width", 12).attr("height", 12)
+				.attr("fill", "#FFF2").attr("stroke", "none");
 			svg.raw("</pattern>");
 		}
 		svg.raw("</defs>");

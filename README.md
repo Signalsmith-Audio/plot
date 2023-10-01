@@ -105,7 +105,7 @@ There's an [additional module](file:///Users/geraint/Development/plot/doc/html/g
 ![Heat-map](doc/examples/embedded-heat-map.svg)
 ![Heat-map with scale](doc/examples/embedded-heat-map-with-scale.svg)
 
-The colour map is (currently) not customisable.
+The colour map can be overridden by `#define`ing `SIGNALSMITH_HEATMAP_RGB` (before including `heatmap.h`), which should be the name of a function which accepts `(double v, uint8_t *rgb)` for v in 0-1.
 
 ## Development
 

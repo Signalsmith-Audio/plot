@@ -46,7 +46,7 @@ public:
 	double fontAspectRatio = 1; ///< scales size estimates, if using a particularly wide font
 	double textPadding = 5, lineHeight = 1.2;
 	// Fills
-	double fillOpacity = 0.3;
+	double fillOpacity = 0.28;
 	double hatchWidth = 1, hatchSpacing = 3;
 	double animation = 2; ///< Animation duration
 
@@ -230,7 +230,7 @@ public:
 				o << ".svg-plot-h" << i << "{mask:url(#svg-plot-hatch" << i << ")}\n";
 			} else {
 				// Compensate for the fact that it's not hatched
-				o << ".svg-plot-h" << i << "{opacity:" << (fillOpacity*(hatchWidth/hatchSpacing)) << "}\n";
+				o << ".svg-plot-h" << i << "{opacity:" << (fillOpacity*(hatchWidth/hatchSpacing*0.75 + 0.25)) << "}\n";
 			}
 		}
 		for (size_t i = 0; i < hatches.size(); ++i) {

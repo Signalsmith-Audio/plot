@@ -699,6 +699,17 @@ class Axis {
 
 	std::vector<Axis *> linked;
 	Axis *linkedParent = nullptr;
+	void removeLinkedParent() {
+		if (!linkedParent) return;
+		for (auto iter = linkedParent->linked.begin(); iter != linkedParent->linked.end(); ++iter) {
+			if (*iter == this) {
+				linkedParent->linked.erase(iter);
+				linkedParent = nullptr;
+				return;
+			}
+		}
+		linkedParent = nullptr;
+	}
 public:
 	double drawLow, drawHigh;
 	double drawMin() const {
@@ -719,6 +730,10 @@ public:
 		autoLabel = true;
 	}
 	explicit Axis(const Axis &other) = default;
+	~Axis() {
+		removeLinkedParent();
+		for (auto other : linked) other->removeLinkedParent();
+	}
 
 	/// Register a value for the auto-scale
 	void autoValue(double v) {
@@ -731,6 +746,7 @@ public:
 			autoMin = std::min(autoMin, v);
 			autoMax = std::max(autoMax, v);
 		}
+		// TODO: why doesn't this cause an infinite loop?
 		for (auto other : linked) other->autoValue(v);
 	}
 	void autoSetup() {
@@ -774,11 +790,13 @@ public:
 			autoValue(t.value);
 		}
 		if (other._label.size()) this->_label = other._label;
+		this->flipped = other.flipped;
 		for (auto o : linked) o->copyFrom(other, clearLabels);
 		return *this;
 	}
 	/// Link this axis to another, copying any ticks/labels set later as well
 	Axis & linkFrom(Axis &other) {
+		removeLinkedParent();
 		copyFrom(other);
 		other.linked.push_back(this);
 		linkedParent = &other;
@@ -1247,7 +1265,7 @@ public:
 					auto &otherPoints = fillToLine->points;
 					for (int i = otherPoints.size() - 1; i >= 0; --i) {
 						auto &p = otherPoints[i];
-						svg.addPoint(fillToLine->axisX.map(p.x), fillToLine->axisY.map(p.y), i == 0);
+						svg.addPoint(fillToLine->axisX.map(p.x), fillToLine->axisY.map(p.y), (smoothFrame || i == 0));
 					}
 				} else if (hasFillToX) {
 					svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points.back().y), true);

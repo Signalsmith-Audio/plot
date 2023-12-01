@@ -171,16 +171,23 @@ struct HeatMap {
 			RetainedMap(HeatMap *map) : map(map) {}
 			std::unique_ptr<HeatMap> map;
 		};
+		
+		bool vertical = std::abs(scalePlot.x.drawHigh - scalePlot.x.drawLow) <= std::abs(scalePlot.y.drawHigh - scalePlot.y.drawLow);
 
 		// Create and retain a colour map image
-		auto *scaleMap = new HeatMap(1, 256);
+		auto *scaleMap = new HeatMap(vertical ? 1 : 256, vertical ? 256 : 1);
 		scaleMap->light = light;
-		for (int y = 0; y < 256; ++y) (*scaleMap)(0, y) = y/255.0;
 		scalePlot.addChild(new RetainedMap(scaleMap));
 
 		auto *embeddedScale = new EmbeddedHeatMap(*scaleMap, scalePlot.x, scalePlot.y);
 		scalePlot.addChild(embeddedScale);
-		scalePlot.y.linkFrom(scale).flip();
+		if (vertical) {
+			for (int y = 0; y < 256; ++y) (*scaleMap)(0, y) = y/255.0;
+			scalePlot.y.linkFrom(scale).flip();
+		} else {
+			for (int x = 0; x < 256; ++x) (*scaleMap)(x, 0) = x/255.0;
+			scalePlot.x.linkFrom(scale);
+		}
 		return scalePlot;
 	}
 
@@ -189,6 +196,18 @@ struct HeatMap {
 		return addTo(grid(0, 0).plot(width, height), grid(1, 0).plot(scaleWidth, height));
 	}
 
+	typename std::vector<double>::iterator begin() {
+		return unitValues.begin();
+	}
+	typename std::vector<double>::iterator end() {
+		return unitValues.end();
+	}
+	typename std::vector<double>::const_iterator begin() const {
+		return unitValues.begin();
+	}
+	typename std::vector<double>::const_iterator end() const {
+		return unitValues.end();
+	}
 private:
 
 	int width, height, outputWidth, outputHeight;
@@ -217,6 +236,9 @@ private:
 	// PNG file contents
 	std::vector<uint8_t> pngBytes;
 	void renderBytes() {
+//		for (auto &v : unitValues) scale.autoValue(v);
+//		scale.autoSetup();
+	
 		double scaleX = outputWidth > 1 ? (width - 1.0)/(outputWidth - 1.0) : (width - 1.0);
 		double scaleY = outputHeight > 1 ? (height - 1.0)/(outputHeight - 1.0) : (height - 1.0);
 		auto getScaledPixel = [&](int outX, int outY) {

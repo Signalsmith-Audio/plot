@@ -111,6 +111,16 @@ struct HeatMap {
 		if (x < 0 || x >= width || y < 0 || y >= height) return dummyValue;
 		return unitValues[x + y*width];
 	}
+	
+	
+	void flipY() {
+		for (int y = 0; y < height/2; ++y) {
+			int i1 = y*width, i2 = (height - 1 - y)*width;
+			for (int x = 0; x < width; ++x) {
+				std::swap(unitValues[i1 + x], unitValues[i2 + x]);
+			}
+		}
+	}
 
 	struct EmbeddedHeatMap : public SvgDrawable {
 		EmbeddedHeatMap(HeatMap &heatMap, Axis &x, Axis &y, bool flippedY=true) : heatMap(heatMap), x(x), y(y), flippedY(flippedY), fullBounds(true) {}
@@ -139,26 +149,27 @@ struct HeatMap {
 		bool flippedY = true, fullBounds = false;
 		Bounds dataBounds;
 	};
+	struct RetainedMap : public SvgDrawable {
+		RetainedMap(HeatMap *map) : map(map) {}
+		std::unique_ptr<HeatMap> map;
+	};
 
 	Plot2D & addTo(Plot2D &plot, Bounds dataBounds) {
 		auto *embedded = new EmbeddedHeatMap(*this, plot.x, plot.y, dataBounds);
 		plot.addChild(embedded);
 		return plot;
 	}
-
 	Plot2D & addTo(Plot2D &plot, Bounds dataBounds, Plot2D &scalePlot) {
 		auto *embedded = new EmbeddedHeatMap(*this, plot.x, plot.y, dataBounds);
 		plot.addChild(embedded);
 		addScaleTo(scalePlot);
 		return plot;
 	}
-
 	Plot2D & addTo(Plot2D &plot, bool flippedY=true) {
 		auto *embedded = new EmbeddedHeatMap(*this, plot.x, plot.y, flippedY);
 		plot.addChild(embedded);
 		return plot;
 	}
-
 	Plot2D & addTo(Plot2D &plot, Plot2D &scalePlot, bool flippedY=true) {
 		auto *embedded = new EmbeddedHeatMap(*this, plot.x, plot.y, flippedY);
 		plot.addChild(embedded);
@@ -167,11 +178,6 @@ struct HeatMap {
 	}
 	
 	Plot2D & addScaleTo(Plot2D &scalePlot) {
-		struct RetainedMap : public SvgDrawable {
-			RetainedMap(HeatMap *map) : map(map) {}
-			std::unique_ptr<HeatMap> map;
-		};
-		
 		bool vertical = std::abs(scalePlot.x.drawHigh - scalePlot.x.drawLow) <= std::abs(scalePlot.y.drawHigh - scalePlot.y.drawLow);
 
 		// Create and retain a colour map image
@@ -196,6 +202,14 @@ struct HeatMap {
 		return addTo(grid(0, 0).plot(width, height), grid(1, 0).plot(scaleWidth, height));
 	}
 
+	/// Makes a retained copy of the map, then calls `.addTo(...)`
+	template<class Drawable, class... Args>
+	auto copyTo(Drawable &drawable, Args &&...args) -> decltype(this->addTo(drawable, std::forward<Args>(args)...)) {
+		HeatMap *copy = new HeatMap(*this);
+		drawable.addChild(new RetainedMap(copy));
+		return copy->addTo(drawable, std::forward<Args>(args)...);
+	}
+
 	typename std::vector<double>::iterator begin() {
 		return unitValues.begin();
 	}
@@ -214,9 +228,10 @@ private:
 	std::vector<double> unitValues;
 	double dummyValue;
 	
-	static void colourMap(double v, uint8_t *rgb) {
+	static void colourMap(double v, uint8_t *rgba8) {
+		double rgba[4] = {v, v, v, 1};
 #ifdef SIGNALSMITH_HEATMAP_RGB
-		SIGNALSMITH_HEATMAP_RGB(v, rgb);
+		SIGNALSMITH_HEATMAP_RGB(v, rgba);
 #else
 		// cubehelix (by Dave Green) with start=1.5, rotations=1.25, rotation=negative, hue=1.8, gamma=0.8, 17 points
 		double rgb1[51] = {0,0,0,0.114,0.054,0,0.279,0.067,0.017,0.433,0.068,0.161,0.518,0.09,0.377,0.509,0.158,0.607,0.418,0.277,0.783,0.291,0.434,0.856,0.193,0.598,0.814,0.175,0.736,0.689,0.262,0.825,0.544,0.439,0.859,0.445,0.658,0.854,0.442,0.857,0.84,0.543,0.985,0.849,0.714,1,0.903,0.888,1,1,1};
@@ -227,9 +242,12 @@ private:
 		
 		double *rgbLow = rgb1 + 3*lowIndex;
 		for (int c = 0; c < 3; ++c) {
-			rgb[c] = std::round(255*std::sqrt(rgbLow[c]*rgbLow[c]*rL + rgbLow[c + 3]*rgbLow[c + 3]*rH));
+			rgba[c] = std::sqrt(rgbLow[c]*rgbLow[c]*rL + rgbLow[c + 3]*rgbLow[c + 3]*rH);
 		}
 #endif
+		for (int c = 0; c < 4; ++c) {
+			rgba8[c] = std::round(255*std::max(0.0, std::min(1.0, rgba[c])));
+		}
 		return;
 	}
 
@@ -269,14 +287,27 @@ private:
 		addBytes("\x08\x03\x00\x00\x00", 5).endChunk();
 
 		startChunk("PLTE");
-		unsigned char rgb[3];
+		unsigned char rgba[4];
+		bool hasAlpha = false;
 		for (int i = 0; i < 256; ++i) {
 			double v = i/255.0;
 			if (light) v = 1 - v;
-			colourMap(v, rgb);
-			addBytes((char *)rgb, 3);
+			colourMap(v, rgba);
+			addBytes((char *)rgba, 3);
+			if (rgba[3] != 255) hasAlpha = true;
 		}
 		endChunk();
+
+		if (hasAlpha) {
+			startChunk("tRNS");
+			for (int i = 0; i < 256; ++i) {
+				double v = i/255.0;
+				if (light) v = 1 - v;
+				colourMap(v, rgba);
+				addBytes((char *)rgba + 3, 1);
+			}
+			endChunk();
+		}
 
 		// Image data
 		startChunk("IDAT").startDeflate();

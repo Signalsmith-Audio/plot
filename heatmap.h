@@ -66,23 +66,23 @@ namespace signalsmith { namespace plot {
 	You create this separately, and then attach to a `Figure` or `Plot` later, or save directly to PNG.
  */
 struct HeatMap {
-	HeatMap(int width, int height, bool flipped=false) : HeatMap(width, height, width, height, flipped) {}
-	HeatMap(int width, int height, int outputWidth, int outputHeight, bool flipped=false) : scale(flipped, !flipped), width(width), height(height), outputWidth(outputWidth), outputHeight(outputHeight) {
+	HeatMap(int width, int height) : HeatMap(width, height, width, height) {}
+	HeatMap(int width, int height, int outputWidth, int outputHeight) : scale(0, 1), width(width), height(height), outputWidth(outputWidth), outputHeight(outputHeight) {
 		unitValues.assign(width*height, 0);
 	}
 	
 	Axis scale;
 	bool light = false;
 	
-	void write(std::string pngFile) {
-		renderBytes();
+	void write(std::string pngFile, bool flippedY=false) {
+		renderBytes(flippedY);
 		
 		std::ofstream output(pngFile);
 		output.write((char *)pngBytes.data(), pngBytes.size());
 	}
 	
-	std::string dataUrl() {
-		renderBytes();
+	std::string dataUrl(bool flippedY=false) {
+		renderBytes(flippedY);
 
 		const char *base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 		std::stringstream str;
@@ -137,11 +137,10 @@ struct HeatMap {
 			double drawRight = fullBounds ? x.drawMax() : x.map(dataBounds.right);
 			double drawTop = fullBounds ? y.drawMin() : y.map(dataBounds.top);
 			double drawBottom = fullBounds ? y.drawMax() : y.map(dataBounds.bottom);
-			if (flippedY) std::swap(drawTop, drawBottom);
 
 			svg.tag("image", true).attr("width", 1).attr("height", 1)
 				.attr("transform", "translate(", drawLeft, ",", drawTop, ")scale(", drawRight - drawLeft, ",", drawBottom - drawTop, ")")
-				.attr("preserveAspectRatio", "none").attr("href", heatMap.dataUrl());
+				.attr("preserveAspectRatio", "none").attr("href", heatMap.dataUrl(flippedY));
 		}
 	private:
 		HeatMap &heatMap;
@@ -253,7 +252,7 @@ private:
 
 	// PNG file contents
 	std::vector<uint8_t> pngBytes;
-	void renderBytes() {
+	void renderBytes(bool flippedY) {
 //		for (auto &v : unitValues) scale.autoValue(v);
 //		scale.autoSetup();
 	
@@ -314,10 +313,11 @@ private:
 		std::vector<unsigned char> rowBytes(outputWidth + 1), prevBytes(outputWidth + 1);
 		rowBytes[0] = 3; // "average" filter (left and up)
 		for (int y = 0; y < outputHeight; ++y) {
+			int py = (flippedY ? outputHeight - 1 - y : y);
 			uint8_t leftByte = 0;
 			double remainder = 0;
 			for (int x = 0; x < outputWidth; ++x) {
-				double v = getScaledPixel(x, y)*255 + remainder;
+				double v = getScaledPixel(x, py)*255 + remainder;
 				int v8 = std::round(v);
 				remainder = v - v8; // simple dither
 				uint8_t byte = std::max(0, std::min(255, v8));

@@ -37,6 +37,7 @@ static double estimateUtf8Width(const char *utf8Str);
 */
 class PlotStyle {
 public:
+	double scale = 1; ///< scales the entire plot (including adjusting the precision)
 	double padding = 10;
 	double lineWidth = 1.5, precision = 100;
 	double markerSize = 3.25;
@@ -560,11 +561,13 @@ public:
 		// Add padding
 		auto bounds = this->bounds.pad(style.padding);
 		
-		SvgWriter svg(o, bounds, style.precision);
+		int scale10 = 1;
+		while (style.scale > scale10*4) scale10 *= 10;
+		SvgWriter svg(o, bounds, style.precision*scale10);
 		svg.raw("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
 		svg.tag("svg").attr("version", "1.1").attr("class", "svg-plot")
 			.attr("xmlns", "http://www.w3.org/2000/svg")
-			.attr("width", bounds.width(), "pt").attr("height", bounds.height(), "pt")
+			.attr("width", bounds.width()*style.scale, "pt").attr("height", bounds.height()*style.scale, "pt")
 			.attr("viewBox", bounds.left, " ", bounds.top, " ", bounds.width(), " ", bounds.height())
 			.attr("preserveAspectRatio", "xMidYMid");
 

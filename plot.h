@@ -626,10 +626,10 @@ public:
 			}
 		}
 		svg.raw("</style>");
-		if (style.scriptHref.size()) svg.tag("script", true).attr("href", style.scriptHref);
 		if (style.scriptSrc.size() > 0) {
 			svg.raw("<script>").write(style.scriptSrc).raw("</script>");
 		}
+		if (style.scriptHref.size()) svg.tag("script", true).attr("href", style.scriptHref);
 		svg.raw("</svg>");
 	}
 	void write(const std::string &svgFile, const PlotStyle &style) {
@@ -1351,7 +1351,7 @@ public:
 			auto &entry = entries[i];
 			double labelX = topLeft.x + style.textPadding*2 + exampleLineWidth;
 			double labelY = location.top + style.textPadding + (i + 0.5)*style.labelSize*style.lineHeight;
-			auto *label = new TextLabel({labelX, labelY}, 1, entry.name, "svg-plot-label", false, false);
+			auto *label = new TextLabel({labelX, labelY}, 1, entry.name, "svg-plot-label svg-plot-l" + std::to_string(i), false, false);
 			this->addLayoutChild(label);
 		}
 		SvgFileDrawable::layout(style);
@@ -1382,7 +1382,6 @@ public:
 		return add(line2D.styleIndex, name, false, false, true);
 	}
 	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
-		svg.raw("<g>");
 		svg.rect(location.left, location.top, location.width(), location.height())
 			.attr("class", "svg-plot-legend");
 		double lineX1 = location.left + style.textPadding;
@@ -1393,20 +1392,19 @@ public:
 			if (entry.fill) {
 				double height = style.labelSize;
 				svg.rect(lineX1, lineY - height*0.5, lineX2 - lineX1, height)
-					.attr("class", "svg-plot-fill ", style.fillClass(entry.style), " ", style.hatchClass(entry.style));
+					.attr("class", "svg-plot-fill svg-plot-l", std::to_string(i), " ", style.fillClass(entry.style), " ", style.hatchClass(entry.style));
 			}
 			if (entry.stroke) {
 				svg.line(lineX1, lineY, lineX2, lineY)
-					.attr("class", "svg-plot-line ", style.strokeClass(entry.style), " ", style.dashClass(entry.style));
+					.attr("class", "svg-plot-line svg-plot-l", std::to_string(i), " ", style.strokeClass(entry.style), " ", style.dashClass(entry.style));
 			}
 			if (entry.marker) {
 				svg.tag("use", true)
 					.attr("href", "#", style.markerId(entry.style))
-					.attr("class", style.fillClass(entry.style), " ", style.strokeClass(entry.style))
+					.attr("class", style.fillClass(entry.style), " ", style.strokeClass(entry.style), " svg-plot-l", std::to_string(i))
 					.attr("transform", "translate(", (lineX1 + lineX2)/2, " ", lineY, ")");
 			}
 		}
-		svg.raw("</g>");
 		SvgFileDrawable::writeLabel(svg, style);
 	}
 };
@@ -1465,6 +1463,7 @@ public:
 	}
 	
 	void writeData(SvgWriter &svg, const PlotStyle &style) override {
+		svg.raw("<g class=\"svg-plot-group\">");
 		svg.rect(size.left, size.top, size.width(), size.height())
 			.attr("class", "svg-plot-axis");
 		for (auto &x : xAxes) {
@@ -1490,10 +1489,11 @@ public:
 		svg.pushClip(size.pad(style.lineWidth*0.5), style.lineWidth);
 		SvgDrawable::writeData(svg, style);
 		svg.popClip();
+		svg.raw("</g>");
 	}
 
 	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
-		svg.raw("<g>");
+		svg.raw("<g class=\"svg-plot-group\">");
 		for (auto &x : xAxes) {
 			double fromY = x->flipped ? size.top : size.bottom;
 			double toY = fromY + (x->flipped ? -style.tickV : style.tickV);

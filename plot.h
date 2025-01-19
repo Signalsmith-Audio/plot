@@ -1504,7 +1504,7 @@ public:
 			double toY = fromY + (x->flipped ? -style.tickV : style.tickV);
 			for (auto &t : x->tickList) {
 				double screenX = x->map(t.value);
-				if (t.name.size() && style.tickV != 0) {
+				if ((t.name.size() || t.strength == Tick::Strength::tick) && style.tickV != 0) {
 					svg.line(screenX, fromY, screenX, toY)
 						.attr("class", "svg-plot-tick");
 				}
@@ -1514,7 +1514,7 @@ public:
 			double fromX = y->flipped ? size.right : size.left;
 			double toX = fromX + (y->flipped ? style.tickH : -style.tickH);
 			for (auto &t : y->tickList) {
-				if (t.name.size() && style.tickH != 0) {
+				if ((t.name.size() || t.strength == Tick::Strength::tick) && style.tickH != 0) {
 					double screenY = y->map(t.value);
 					svg.line(fromX, screenY, toX, screenY)
 						.attr("class", "svg-plot-tick");
@@ -1535,7 +1535,11 @@ public:
 		// Add labels for axes
 		for (auto &x : xAxes) {
 			double xMin = x->drawMin() - 0.1, xMax = x->drawMax() + 0.1;
-			double alignment = (x->flipped ? -1 : 1), hasValues = x->tickList.size() ? 1 : 0;
+			double alignment = (x->flipped ? -1 : 1);
+			bool hasValues = false;
+			for (auto &t : x->tickList) {
+				if (t.name.size()) hasValues = true;
+			}
 			double screenY = (x->flipped ? size.top : size.bottom) + alignment*(tv + hasValues*(style.valueSize*0.5 + style.textPadding));
 			for (auto &t : x->tickList) {
 				double screenX = x->map(t.value);

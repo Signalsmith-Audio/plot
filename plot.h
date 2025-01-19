@@ -43,9 +43,9 @@ public:
 	double markerSize = 3.25;
 	double tickH = 4, tickV = 4;
 	// Text
-	double labelSize = 12, valueSize = 10;
+	double labelSize = 12, valueSize = 10, titleSize = 13;
 	double fontAspectRatio = 1; ///< scales size estimates, if using a particularly wide font
-	double textPadding = 5, lineHeight = 1.2;
+	double textPadding = 5, titlePadding = 15, lineHeight = 1.2;
 	// Fills
 	double fillOpacity = 0.28;
 	double hatchWidth = 1, hatchSpacing = 3;
@@ -180,7 +180,7 @@ public:
 				stroke-width: 1px;
 				stroke-linecap: butt;
 			}
-			.svg-plot-value, .svg-plot-label {
+			.svg-plot-value, .svg-plot-label, .svg-plot-title {
 				font-family: Arial,sans-serif;
 				fill: #000;
 				stroke: #FFFFFF48;
@@ -195,6 +195,9 @@ public:
 			}
 			.svg-plot-value {
 				font-size: )CSS" << valueSize << R"CSS(px;
+			}
+			.svg-plot-title {
+				font-size: )CSS" << titleSize << R"CSS(px;
 			}
 			.svg-plot-hatch {
 				stroke: #FFF;
@@ -920,7 +923,7 @@ public:
 
 class TextLabel : public SvgDrawable {
 	double textWidth = 0;
-	void write(SvgWriter &svg, double fontSize) {
+	void write(SvgWriter &svg) {
 		{
 			auto text = svg.tag("text").attr("class", cssClass);
 			double tx = drawAt.x, ty = drawAt.y;
@@ -948,11 +951,15 @@ protected:
 	Point2D drawAt;
 	double alignment = 0; // 0=centre, 1=left, -1=right
 	std::string text, cssClass;
-	bool vertical, isValue;
+	bool vertical;
+	double fontSize = 0;
+	int typeIndex = 0;
 
 	void layout(const PlotStyle &style) override {
+		double sizes[3] = {style.labelSize, style.valueSize, style.titleSize};
+		fontSize = sizes[typeIndex];
+
 		double x = drawAt.x, y = drawAt.y;
-		double fontSize = isValue ? style.valueSize : style.labelSize;
 
 		// Assume all text/labels are UTF-8
 		textWidth = estimateUtf8Width(text.c_str())*fontSize*style.fontAspectRatio;
@@ -962,14 +969,15 @@ protected:
 		} else {
 			this->bounds = {x + textWidth*(alignment - 1)*0.5, x + textWidth*(alignment + 1)*0.5, y - fontSize*0.5, y + fontSize*0.5};
 		}
+		if (typeIndex == 2) this->bounds = this->bounds.pad(style.titlePadding);
 		SvgDrawable::layout(style);
 	}
 
 public:
-	TextLabel(Point2D at, double alignment, std::string text, std::string cssClass="svg-plot-label", bool vertical=false, bool isValue=false) : drawAt(at), alignment(alignment), text(text), cssClass(cssClass), vertical(vertical), isValue(isValue) {}
+	TextLabel(Point2D at, double alignment, std::string text, std::string cssClass="svg-plot-label", bool vertical=false, int typeIndex=0) : drawAt(at), alignment(alignment), text(text), cssClass(cssClass), vertical(vertical), typeIndex(typeIndex) {}
 	
-	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
-		write(svg, isValue ? style.valueSize : style.labelSize);
+	void writeLabel(SvgWriter &svg, const PlotStyle &) override {
+		write(svg);
 	}
 };
 
@@ -1441,6 +1449,7 @@ public:
 
 class Plot2D : public SvgFileDrawable {
 	std::string plotTitle;
+	bool plotTitleFlipped = false;
 	std::vector<std::unique_ptr<Axis>> xAxes, yAxes;
 	Bounds size;
 public:
@@ -1553,7 +1562,7 @@ public:
 				double midX = (x->drawMax() + x->drawMin())*0.5;
 				auto *label = new TextLabel({midX, labelY}, 0, x->label(), "svg-plot-label " + style.textClass(x->styleIndex), false, true);
 				this->addLayoutChild(label);
-		}
+			}
 		}
 		double longestLabelLeft = 0, longestLabelRight = 0;
 		for (auto &y : yAxes) {
@@ -1581,6 +1590,14 @@ public:
 				auto *label = new TextLabel({labelX, midY}, 0, y->label(), "svg-plot-label " + style.textClass(y->styleIndex), true, true);
 				this->addLayoutChild(label);
 			}
+		}
+
+		if (plotTitle.size()) {
+			double alignment = (plotTitleFlipped ? 1 : -1);
+			double screenY = (plotTitleFlipped ? size.bottom : size.top) + alignment*(style.labelSize*0.5 + style.textPadding);
+			double midX = (size.left + size.right)*0.5;
+			auto *label = new TextLabel({midX, screenY}, 0, plotTitle, "svg-plot-title", false, 2);
+			this->addLayoutChild(label);
 		}
 
 		this->bounds = size.pad(th, tv);
@@ -1627,6 +1644,15 @@ public:
 	}
 	Image & image(double left, double right, double top, double bottom, const std::string &url) {
 		return image(Bounds{left, right, top, bottom}, url);
+	}
+	
+	Plot2D & title(const std::string &t) {
+		plotTitle = t;
+		return *this;
+	}
+	Plot2D & title(const std::string &t, bool flipped) {
+		plotTitleFlipped = flipped;
+		return title(t);
 	}
 };
 

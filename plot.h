@@ -1449,7 +1449,7 @@ public:
 
 class Plot2D : public SvgFileDrawable {
 	std::string plotTitle;
-	bool plotTitleFlipped = false;
+	double titleRx, titleRy;
 	std::vector<std::unique_ptr<Axis>> xAxes, yAxes;
 	Bounds size;
 public:
@@ -1593,10 +1593,28 @@ public:
 		}
 
 		if (plotTitle.size()) {
-			double alignment = (plotTitleFlipped ? 1 : -1);
-			double screenY = (plotTitleFlipped ? size.bottom : size.top) + alignment*(style.labelSize*0.5 + style.textPadding);
-			double midX = (size.left + size.right)*0.5;
-			auto *label = new TextLabel({midX, screenY}, 0, plotTitle, "svg-plot-title", false, 2);
+			double height = style.titleSize*style.lineHeight;
+
+			double rx = titleRx, ry = titleRy;
+			Bounds dataInset = size.pad(-style.tickH, -style.tickV - height/2);
+			Bounds dataOutset = size.pad(style.tickH, style.tickV + height/2);
+
+			double textX = dataInset.left + dataInset.width()*rx;
+			double textY = dataInset.bottom - dataInset.height()*ry;
+			double textAlignment = 1 - 2*rx;
+			if (rx < 0) {
+				textX = dataInset.left + (dataOutset.left - dataInset.left)*-rx;
+				textAlignment = 2*rx + 1;
+			} else if (rx > 1) {
+				textX = dataInset.right + (dataOutset.right - dataInset.right)*(rx - 1);
+				textAlignment = 2*(rx - 1) - 1;
+			}
+			if (ry < 0) {
+				textY = dataInset.bottom + (dataOutset.bottom - dataInset.bottom)*-ry;
+			} else if (ry > 1) {
+				textY = dataInset.top + (dataOutset.top - dataInset.top)*(ry - 1);
+			}
+			auto *label = new TextLabel({textX, textY}, textAlignment, plotTitle, "svg-plot-title", false, 2);
 			this->addLayoutChild(label);
 		}
 
@@ -1646,13 +1664,11 @@ public:
 		return image(Bounds{left, right, top, bottom}, url);
 	}
 	
-	Plot2D & title(const std::string &t) {
+	Plot2D & title(const std::string &t, double rx=0.5, double ry=2) {
 		plotTitle = t;
+		titleRx = rx;
+		titleRy = ry;
 		return *this;
-	}
-	Plot2D & title(const std::string &t, bool flipped) {
-		plotTitleFlipped = flipped;
-		return title(t);
 	}
 };
 

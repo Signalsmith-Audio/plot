@@ -749,8 +749,13 @@ public:
 			autoMin = std::min(autoMin, v);
 			autoMax = std::max(autoMax, v);
 		}
-		// TODO: why doesn't this cause an infinite loop?
-		for (auto other : linked) other->autoValue(v);
+		for (auto &child : linked) {
+			if (child->linkedParent == this) {
+				child->linkedParent = nullptr;
+				child->autoValue(v);
+				child->linkedParent = this;
+			}
+		}
 	}
 	void autoSetup() {
 		if (hasAutoValue) {

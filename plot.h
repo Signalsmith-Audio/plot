@@ -37,6 +37,11 @@ static double estimateUtf8Width(const char *utf8Str);
 */
 class PlotStyle {
 public:
+	static PlotStyle &defaultStyle() {
+		static PlotStyle style;
+		return style;
+	}
+
 	double scale = 1; ///< scales the entire plot (including adjusting the precision)
 	double padding = 10;
 	double lineWidth = 1.5, precision = 100;
@@ -549,14 +554,6 @@ public:
 /// Top-level objects which can generate SVG files
 class SvgFileDrawable : public SvgDrawable {
 public:
-	virtual PlotStyle defaultStyle() const {
-		PlotStyle result;
-#ifdef SIGNALSMITH_PLOT_DEFAULT_STYLE
-		SIGNALSMITH_PLOT_DEFAULT_STYLE((PlotStyle &)result);
-#endif
-		return result;
-	}
-	
 	void write(std::ostream &o, const PlotStyle &style) {
 		this->invalidateLayout();
 		this->layout(style);
@@ -641,10 +638,10 @@ public:
 	}
 	// If we aren't given a style, use the default one
 	void write(std::ostream &o) {
-		this->write(o, this->defaultStyle());
+		this->write(o, PlotStyle::defaultStyle());
 	}
 	void write(const std::string &svgFile) {
-		write(svgFile, this->defaultStyle());
+		write(svgFile, PlotStyle::defaultStyle());
 	}
 	
 	/// Draws when this object goes out of scope
@@ -663,7 +660,7 @@ public:
 		}
 	};
 	ScheduledWrite writeLater(const std::string &svgFile) {
-		return ScheduledWrite{*this, this->defaultStyle(), svgFile};
+		return ScheduledWrite{*this, PlotStyle::defaultStyle(), svgFile};
 	}
 };
 
@@ -1795,11 +1792,8 @@ public:
 class Figure : public Grid {
 public:
 	PlotStyle style;
-	PlotStyle defaultStyle() const override {
-		return style;
-	}
 	
-	Figure() : style(Grid::defaultStyle()) {}
+	Figure() : style(PlotStyle::defaultStyle()) {}
 };
 
 static double estimateCharWidth(int c) {
@@ -1860,5 +1854,21 @@ static double estimateUtf8Width(const char *utf8Str) {
 
 /// @}
 }}; // namespace
+
+// If custom style exists, include it automatically
+#if defined(__has_include) && __has_include("./style.h")
+#	include "./style.h"
+#endif
+/* The simplest way to change it is the constructor of a global object
+
+	struct MyCustomStyle {
+		MyCustomStyle() {
+			auto &style = signalsmith::plot::PlotStyle::defaultStyle();
+			
+			style = {}; // optionally reset to original
+			style.cssSuffix += ...
+		}
+	} myCustomStyle_global;
+*/
 
 #endif // include guard

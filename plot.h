@@ -580,8 +580,8 @@ public:
 		)*std::sqrt(2));
 		svg.raw("<defs>");
 		for (size_t i = 0; i < style.markers.size(); ++i) {
-			svg.tag("g").attr("id", style.markerId(i)).attr("class", "svg-plot-marker");
-			svg.raw(style.markerRaw(i)).raw("</g>");
+			svg.tag("g").attr("id", style.markerId(int(i))).attr("class", "svg-plot-marker");
+			svg.raw(style.markerRaw(int(i))).raw("</g>");
 		}
 		for (size_t i = 0; i < style.hatches.size(); ++i) {
 			auto &hatch = style.hatches[i];
@@ -1023,7 +1023,7 @@ class Line2D : public SvgDrawable {
 		svg.raw(" values=\"");
 		for (size_t i = 0; i < frames.size(); ++i) {
 			if (i > 0) svg.raw(";");
-			writeValue(i);
+			writeValue(int(i));
 		}
 		if (framesLoopTime > lastFrame || smoothFrame) {
 			svg.raw(";");
@@ -1283,7 +1283,7 @@ public:
 			if (fill) {
 				if (fillToLine) {
 					auto &otherPoints = fillToLine->points;
-					for (int i = otherPoints.size() - 1; i >= 0; --i) {
+					for (int i = int(otherPoints.size()) - 1; i >= 0; --i) {
 						auto &p = otherPoints[i];
 						svg.addPoint(fillToLine->axisX.map(p.x), fillToLine->axisY.map(p.y), (smoothFrame || i == 0));
 					}

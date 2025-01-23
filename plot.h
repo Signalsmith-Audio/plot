@@ -138,16 +138,15 @@ public:
 	}
 	
 	void css(std::ostream &o) const {
-		o << cssPrefix;
 		o << R"CSS(
 			.svg-plot {
 				stroke-linecap: butt;
 				stroke-linejoin: round;
 			}
 			.svg-plot-bg {
-				fill: none;
+				fill: #FFF;
 				stroke: none;
-			}
+    			}
 			.svg-plot-axis {
 				stroke: none;
 				fill: #FFFFFFD9;
@@ -248,7 +247,6 @@ public:
 				o << "#svg-plot-hatch" << i << "-pattern{stroke-width:" << hatchWidth*h.lineScale << "px}\n";
 			}
 		}
-		o << cssSuffix;
 	}
 };
 
@@ -571,7 +569,7 @@ public:
 			.attr("viewBox", bounds.left, " ", bounds.top, " ", bounds.width(), " ", bounds.height())
 			.attr("preserveAspectRatio", "xMidYMid");
 
-		svg.rect(this->bounds.left, this->bounds.top, this->bounds.width(), this->bounds.height())
+		svg.rect(bounds.left, bounds.top, bounds.width(), bounds.height())
 			.attr("class", "svg-plot-bg");
 		this->writeData(svg, style);
 		this->writeLabel(svg, style);
@@ -607,25 +605,34 @@ public:
 		}
 		svg.raw("</defs>");
 
+		// Strip whitespace that doesn't appear between letters/numbers
+		auto addCompactCss = [&](const std::string &css) {
+			const char *cPtr = css.c_str();
+			bool letter = false, letterThenWhitespace = false;
+			while (*cPtr) {
+				char c = *(cPtr++);
+				if (c == '\t' || c == '\n' || c == ' ') {
+					letterThenWhitespace = letter;
+				} else {
+					letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == ')' || c == ']';
+					if (letterThenWhitespace && letter) o << ' ';
+					letterThenWhitespace = false;
+					o << c;
+				}
+			}
+		};
+
 		svg.raw("<style>");
 		std::stringstream cssStream;
 		style.css(cssStream);
-		std::string css = cssStream.str();
-		const char *cPtr = css.c_str();
-		// Strip whitespace that doesn't appear between letters/numbers
-		bool letter = false, letterThenWhitespace = false;
-		while (*cPtr) {
-			char c = *(cPtr++);
-			if (c == '\t' || c == '\n' || c == ' ') {
-				letterThenWhitespace = letter;
-			} else {
-				letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == ')' || c == ']';
-				if (letterThenWhitespace && letter) o << ' ';
-				letterThenWhitespace = false;
-				o << c;
-			}
-		}
+		addCompactCss(style.cssPrefix + cssStream.str());
 		svg.raw("</style>");
+		// Some things (like @import) can only happen at the start of CSS, so we support this by having two <style>s
+		if (style.cssSuffix.size()) {
+			svg.raw("<style>");
+			addCompactCss(style.cssSuffix);
+			svg.raw("</style>");
+		}
 		if (style.scriptSrc.size() > 0) {
 			svg.raw("<script>").write(style.scriptSrc).raw("</script>");
 		}

@@ -517,18 +517,18 @@ public:
 	}
 
 	virtual void writeData(SvgWriter &svg, const PlotStyle &style) {
-		for (int i = layoutChildren.size() - 1; i >= 0; --i) {
+		for (int i = int(layoutChildren.size()) - 1; i >= 0; --i) {
 			layoutChildren[i]->writeData(svg, style);
 		}
-		for (int i = children.size() - 1; i >= 0; --i) {
+		for (int i = int(children.size()) - 1; i >= 0; --i) {
 			children[i]->writeData(svg, style);
 		}
 	}
 	virtual void writeLabel(SvgWriter &svg, const PlotStyle &style) {
-		for (int i = layoutChildren.size() - 1; i >= 0; --i) {
+		for (int i = int(layoutChildren.size()) - 1; i >= 0; --i) {
 			layoutChildren[i]->writeLabel(svg, style);
 		}
-		for (int i = children.size() - 1; i >= 0; --i) {
+		for (int i = int(children.size()) - 1; i >= 0; --i) {
 			children[i]->writeLabel(svg, style);
 		}
 	}

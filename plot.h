@@ -1012,7 +1012,7 @@ class Line2D : public SvgDrawable {
 	Point2D latest{0, 0};
 	
 	template<class WriteValue>
-	void writeAnimationAttrs(SvgWriter &svg, WriteValue &&writeValue) {
+	void writeAnimationAttrs(SvgWriter &svg, WriteValue &&writeValue, const char *blankValue) {
 		double lastFrame = frames.back().time;
 		double framesEnd = std::max(framesLoopTime, lastFrame);
 		if (framesLoopTime > 0) {
@@ -1021,20 +1021,31 @@ class Line2D : public SvgDrawable {
 			svg.attr("dur", framesEnd);
 		}
 		svg.raw(" values=\"");
+		bool repeatEnd = (framesLoopTime > lastFrame || smoothFrame);
+		bool blankZero = (frames[0].time > 0);
+		if (blankZero) {
+			svg.raw(blankValue);
+			svg.raw(";");
+		}
 		for (size_t i = 0; i < frames.size(); ++i) {
 			if (i > 0) svg.raw(";");
 			writeValue(int(i));
 		}
-		if (framesLoopTime > lastFrame || smoothFrame) {
+		if (repeatEnd) {
 			svg.raw(";");
-			writeValue(0);
+			if (blankZero) {
+				svg.raw(blankValue);
+			} else {
+				writeValue(0);
+			}
 		}
 		svg.raw("\" keyTimes=\"");
+		if (blankZero) svg.raw("0;");
 		for (size_t i = 0; i < frames.size(); ++i) {
 			if (i > 0) svg.raw(";");
 			svg.write(frames[i].time/framesEnd);
 		}
-		if (framesLoopTime > lastFrame || smoothFrame) svg.raw(";1");
+		if (repeatEnd) svg.raw(";1");
 	}
 public:
 	PlotStyle::Counter styleIndex;
@@ -1226,6 +1237,7 @@ public:
 			maxMarkers = std::max(maxMarkers, frame.markers.size());
 		}
 		static constexpr double outOfRange = -10000;
+		const char *neutralValue = "-10000 -10000";
 		for (size_t m = 0; m < maxMarkers; ++m) {
 			double x = outOfRange, y = outOfRange;
 			auto shape = styleIndex;
@@ -1265,7 +1277,7 @@ public:
 							}
 						}
 						svg.raw(x, " ", y);
-					});
+					}, neutralValue);
 					svg.raw("\"/></g>");
 				}
 			}
@@ -1275,7 +1287,10 @@ public:
 	
 	void writeData(SvgWriter &svg, const PlotStyle &style) override {
 		auto writePoints = [&](std::vector<Point2D> &points, bool fill) {
-			if (!points.size()) return;
+			if (!points.size()) {
+				svg.raw("M0 0");
+				return;
+			}
 			svg.startPath();
 			for (auto &p : points) {
 				svg.addPoint(axisX.map(p.x), axisY.map(p.y), smoothFrame);
@@ -1306,7 +1321,7 @@ public:
 					.attr("attributeName", "d").attr("calcMode", smoothFrame ? "linear" : "discrete");
 				writeAnimationAttrs(svg, [&](size_t i) {
 					writePoints(frames[i].points, fill);
-				});
+				}, "M0 0");
 				svg.raw("\"/></path>");
 			} else {
 				svg.raw("\"/>");

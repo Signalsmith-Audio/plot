@@ -741,8 +741,8 @@ public:
 	}
 	explicit Axis(const Axis &other) = default;
 	~Axis() {
+		for (auto other : linked) other->linkedParent = nullptr;
 		removeLinkedParent();
-		for (auto other : linked) other->removeLinkedParent();
 	}
 
 	/// Register a value for the auto-scale

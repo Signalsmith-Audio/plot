@@ -52,7 +52,7 @@ int main() {
 	{ // Custom style, using a figure
 		signalsmith::plot::Figure figure;
 
-		auto &plot = figure.plot();
+		auto &plot = figure.plot(180, 130);
 
 		// Customise the axes
 		plot.x.major(0).tick(10).label("time");
@@ -77,7 +77,7 @@ int main() {
 		signalsmith::plot::PlotStyle::defaultStyle() = customStyle();
 		
 		signalsmith::plot::Figure figure;
-		auto &plot = figure.plot();
+		auto &plot = figure.plot(180, 130);
 
 		// Customise the axes
 		plot.x.major(0).tick(10).label("time");

@@ -52,7 +52,7 @@ public:
 	double fontAspectRatio = 1; ///< scales size estimates, if using a particularly wide font
 	double textPadding = 5, titlePadding = 15, lineHeight = 1.2;
 	// Fills
-	double fillOpacity = 0.28;
+	double fillOpacity = 0.28, dotOpacity = 0.6;
 	double hatchWidth = 1, hatchSpacing = 3;
 	double animation = 2; ///< Animation duration
 
@@ -165,6 +165,9 @@ public:
 				stroke: none;
 				opacity: )CSS" << fillOpacity << R"CSS(;
 			}
+			.svg-plot-dot .svg-plot-fill {
+				opacity: )CSS" << dotOpacity << R"CSS(;
+			}
 			.svg-plot-major {
 				stroke: #000;
 				stroke-width: 1px;
@@ -267,6 +270,8 @@ public:
 		}
 	}
 	std::function<void(double,double*)> cmap = defaultCMap;
+
+	double dotCmapDepth = -0.85; // colour-map scaling - negative so that 0 is light, and not quite |1| so that it never gets to 100% white/black
 	
 	// Make sure you have a copy, not a reference
 	PlotStyle copy() {
@@ -483,6 +488,28 @@ public:
 			}
 		}
 		prevPoint = {x, y};
+	}
+	
+	char cmapStr[10];
+	void translateCmap(const PlotStyle &style, double v) {
+		double rgba[4] = {v, v, v, 1};
+		style.cmap(v, rgba);
+		uint8_t rgba8[4];
+		for (size_t c = 0; c < 4; ++c) {
+			rgba8[c] = std::round(255*std::max(0.0, std::min(1.0, rgba[c])));
+		}
+
+		static constexpr const char *hexChars = "0123456789ABCDEF";
+		size_t channels = (rgba8[3] < 255) ? 4 : 3;
+		
+		// Translate to RGB(A) hex representation
+		cmapStr[0] = '#';
+		for (size_t c = 0; c < channels; ++c) {
+			uint8_t byte = rgba8[c];
+			cmapStr[c*2 + 1] = hexChars[byte>>4];
+			cmapStr[c*2 + 2] = hexChars[byte&15];
+			cmapStr[c*2 + 3] = '\0';
+		}
 	}
 };
 
@@ -1026,10 +1053,17 @@ class Line2D : public SvgDrawable {
 		int shape;
 	};
 	std::vector<Marker> markers;
+	struct Dot {
+		double x, y, screenR;
+		bool hasColour;
+		double c;
+	};
+	std::vector<Dot> dots;
 	struct Frame {
 		double time;
 		std::vector<Point2D> points;
 		std::vector<Marker> markers;
+		std::vector<Dot> dots;
 	};
 	double framesLoopTime = 0;
 	std::vector<Frame> frames;
@@ -1102,12 +1136,29 @@ public:
 		return *this;
 	}
 
+	Line2D & dot(double x, double y, double screenR) {
+		latest = {x, y};
+		dots.push_back({x, y, screenR, false, 0});
+		axisX.autoValue(x);
+		axisY.autoValue(y);
+		return *this;
+	}
+
+	Line2D & dot(double x, double y, double screenR, double unitColour) {
+		latest = {x, y};
+		dots.push_back({x, y, screenR, true, unitColour});
+		axisX.autoValue(x);
+		axisY.autoValue(y);
+		return *this;
+	}
+
 	void toFrame(double time, bool clear=true) override {
 		SvgDrawable::toFrame(time, clear);
-		frames.push_back({time, points, markers});
+		frames.push_back({time, points, markers, dots});
 		if (clear) {
 			points.clear();
 			markers.clear();
+			dots.clear();
 		}
 		framesLoopTime = std::max(time, framesLoopTime);
 	}
@@ -1362,6 +1413,72 @@ public:
 				.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), " ", style.dashClass(styleIndex));
 			writeD(false);
 		}
+
+		size_t maxDots = dots.size();
+		bool animated = (frames.size() > 0);
+		for (auto &frame : frames) {
+			maxDots = std::max(maxDots, frame.dots.size());
+		}
+		if (maxDots > 0) {
+			svg.tag("g");
+			static constexpr double outOfRange = -10000;
+			const char *neutralValue = "-10000 -10000";
+			for (size_t d = 0; d < maxDots; ++d) {
+				double x = outOfRange, y = outOfRange, r = 5, c = 0;
+				bool hasC = false;
+
+				if (d < dots.size()) {
+					auto &dot = dots[d];
+					x = axisX.map(dot.x);
+					y = axisY.map(dot.y);
+					r = dot.screenR;
+					hasC = dot.hasColour;
+					c = 0.5 + (dot.c - 0.5)*style.dotCmapDepth;
+				}
+				if (animated || x != outOfRange || y != outOfRange) {
+					if (!animated) {
+						if (hasC) svg.translateCmap(style, c);
+						svg.tag("g").attr("class", "svg-plot-dot");
+						if (_drawFill) { // fill
+							auto circle = svg.tag("circle", true)
+								.attr("cx", x).attr("cy", y).attr("r", r)
+								.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
+							if (hasC) circle.attr("style", "fill:", svg.cmapStr);
+						}
+						if (_drawLine) { // border
+							auto circle = svg.tag("circle", true)
+								.attr("cx", x).attr("cy", y).attr("r", r)
+								.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), " ");
+							if (hasC) circle.attr("style", "stroke:", svg.cmapStr);
+						}
+						svg.raw("</g>");
+					} else {
+//						svg.tag("circle")
+//							.attr("cx", x).attr("cy", y).attr("r", r)
+//							.attr("class", "svg-plot-dot");
+
+	//					svg.raw("<animateTransform").attr("calcMode", "discrete")
+	//						.attr("attributeName", "transform").attr("attributeType", "XML")
+	//						.attr("type", "translate");
+	//					writeAnimationAttrs(svg, [&](int index) {
+	//						double x = outOfRange, y = outOfRange;
+	//						if (m < frames[index].markers.size()) {
+	//							x = axisX.map(frames[index].markers[m].point.x);
+	//							y = axisY.map(frames[index].markers[m].point.y);
+	//							if (x < xMin || x > xMax || y < yMin || y > yMax) {
+	//								x = y = outOfRange;
+	//							}
+	//						}
+	//						svg.raw(x, " ", y);
+	//					}, neutralValue);
+	//					svg.raw("\"/></g>");
+						svg.raw("</circle>");
+					}
+				}
+			}
+			svg.raw("</g>");
+		}
+
 		SvgDrawable::writeData(svg, style);
 	}
 };
@@ -1437,6 +1554,7 @@ public:
 	Legend & marker(const Line2D &line2D, std::string name) {
 		return add(line2D.styleIndex, name, false, false, true);
 	}
+
 	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
 		svg.rect(location.left, location.top, location.width(), location.height())
 			.attr("class", "svg-plot-legend");
@@ -1685,7 +1803,13 @@ public:
 	Line2D & fill(Args &&...args) {
 		return line(args...).drawLine(false).drawFill(true);
 	}
-	
+
+	/// Convenience method, returns a line including fills
+	template<class ...Args>
+	Line2D & lineFill(Args &&...args) {
+		return line(args...).drawLine(true).drawFill(true);
+	}
+
 	/** Creates a legend at a given position.
 	If `xRatio` and `yRatio` are in the range 0-1, the legend will be inside the plot.  Otherwise, it will move outside the plot (e.g. -1 will be left/below the axes, including any labels).
 	*/

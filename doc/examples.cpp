@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <random>
 
 signalsmith::plot::PlotStyle customStyle();
 
@@ -310,6 +311,48 @@ int main() {
 			}
 		}
 		figure.write("embedded-heat-map-with-scale" + std::string(heatMap.light ? "-light" : "") + ".svg");
+	}
+
+	{ // Scatter plot with varying radius
+		signalsmith::plot::Figure figure;
+		auto &plotDiscrete = figure(0, 0).plot(150, 150).title("discrete");
+		auto &plotContinuous = figure(1, 0).plot(150, 150).title("continuous");
+		plotDiscrete.x.linear(-1, 1).major(0, "");
+		plotDiscrete.y.copyFrom(plotDiscrete.x);
+		plotContinuous.x.copyFrom(plotDiscrete.x);
+		plotContinuous.y.copyFrom(plotDiscrete.y);
+		
+		std::mt19937 randomEngine;
+		std::uniform_real_distribution<double> valueDist(-1, 1);
+		std::uniform_real_distribution<double> radiusDist(2, 12);
+		std::uniform_real_distribution<double> colourDist(0, 1);
+
+		auto &scatterDiscrete0 = plotDiscrete.lineFill();
+		auto &scatterDiscrete1 = plotDiscrete.lineFill();
+		auto &scatterDiscrete2 = plotDiscrete.lineFill();
+		auto &scatterDiscrete3 = plotDiscrete.lineFill();
+		// List of pointers to the above discrete categories
+		signalsmith::plot::Line2D *scatterDiscrete[4] = {
+			&scatterDiscrete0, &scatterDiscrete1, &scatterDiscrete2, &scatterDiscrete3
+		};
+		
+		auto &scatter = plotContinuous.lineFill();
+
+		for (size_t i = 0; i < 20; ++i) {
+			double x = valueDist(randomEngine), y = valueDist(randomEngine);
+			double screenR = radiusDist(randomEngine);
+			double c = colourDist(randomEngine);
+			
+			// Choose which scatter to add to, but don't specify a colour
+			size_t index = std::floor(c*4);
+			auto *discreteLine = scatterDiscrete[index];
+			discreteLine->dot(x, y, screenR);
+
+			// specify a colour (0-1)
+			scatter.dot(x, y, screenR, c);
+		}
+
+		figure.write("scatter-plot.svg");
 	}
 }
 

@@ -249,6 +249,25 @@ public:
 		}
 	}
 	
+	// Colour-map
+	static void defaultCMap(double v, double *rgba) {
+		rgba[0] = rgba[1] = rgba[2] = v;
+		rgba[3] = 1;
+
+		// 17-point lookup table for cubehelix (by Dave Green) with start=1.5, rotations=1.25, rotation=negative, hue=1.8, gamma=0.8
+		double rgb1[51] = {0,0,0,0.114,0.054,0,0.279,0.067,0.017,0.433,0.068,0.161,0.518,0.09,0.377,0.509,0.158,0.607,0.418,0.277,0.783,0.291,0.434,0.856,0.193,0.598,0.814,0.175,0.736,0.689,0.262,0.825,0.544,0.439,0.859,0.445,0.658,0.854,0.442,0.857,0.84,0.543,0.985,0.849,0.714,1,0.903,0.888,1,1,1};
+		
+		double index = v*16;
+		int lowIndex = std::min(std::floor(index), 15.0);
+		double rH = (index - lowIndex), rL = 1 - rH;
+		
+		double *rgbLow = rgb1 + 3*lowIndex;
+		for (int c = 0; c < 3; ++c) {
+			rgba[c] = std::sqrt(rgbLow[c]*rgbLow[c]*rL + rgbLow[c + 3]*rgbLow[c + 3]*rH);
+		}
+	}
+	std::function<void(double,double*)> cmap = defaultCMap;
+	
 	// Make sure you have a copy, not a reference
 	PlotStyle copy() {
 		return *this;

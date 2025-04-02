@@ -74,15 +74,19 @@ struct HeatMap {
 	Axis scale;
 	bool light = false;
 	
-	void write(std::string pngFile, bool flippedY=false) {
-		renderBytes(flippedY);
+	void write(std::string pngFile, PlotStyle &style, bool flippedY=false) {
+		renderBytes(style, flippedY);
 		
 		std::ofstream output(pngFile);
 		output.write((char *)pngBytes.data(), pngBytes.size());
 	}
-	
-	std::string dataUrl(bool flippedY=false) {
-		renderBytes(flippedY);
+
+	void write(std::string pngFile, bool flippedY=false) {
+		write(pngFile, PlotStyle::defaultStyle(), flippedY);
+	}
+
+	std::string dataUrl(const PlotStyle &style, bool flippedY=false) {
+		renderBytes(style, flippedY);
 
 		const char *base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 		std::stringstream str;
@@ -102,7 +106,11 @@ struct HeatMap {
 		}
 		return str.str();
 	}
-	
+
+	std::string dataUrl(bool flippedY=false) {
+		return dataUrl(PlotStyle::defaultStyle(), flippedY);
+	}
+
 	double & operator()(int x, int y) {
 		if (x < 0 || x >= width || y < 0 || y >= height) return dummyValue;
 		return unitValues[x + y*width];
@@ -111,7 +119,6 @@ struct HeatMap {
 		if (x < 0 || x >= width || y < 0 || y >= height) return dummyValue;
 		return unitValues[x + y*width];
 	}
-	
 	
 	void flipY() {
 		for (int y = 0; y < height/2; ++y) {
@@ -140,7 +147,7 @@ struct HeatMap {
 
 			svg.tag("image", true).attr("width", 1).attr("height", 1)
 				.attr("transform", "translate(", drawLeft, ",", drawTop, ")scale(", drawRight - drawLeft, ",", drawBottom - drawTop, ")")
-				.attr("preserveAspectRatio", "none").attr("href", heatMap.dataUrl(flippedY));
+				.attr("preserveAspectRatio", "none").attr("href", heatMap.dataUrl(style, flippedY));
 		}
 	private:
 		HeatMap &heatMap;
@@ -227,32 +234,17 @@ private:
 	std::vector<double> unitValues;
 	double dummyValue;
 	
-	static void colourMap(double v, uint8_t *rgba8) {
+	static void colourMap(const PlotStyle &style, double v, uint8_t *rgba8) {
 		double rgba[4] = {v, v, v, 1};
-#ifdef SIGNALSMITH_HEATMAP_RGB
-		SIGNALSMITH_HEATMAP_RGB(v, rgba);
-#else
-		// cubehelix (by Dave Green) with start=1.5, rotations=1.25, rotation=negative, hue=1.8, gamma=0.8, 17 points
-		double rgb1[51] = {0,0,0,0.114,0.054,0,0.279,0.067,0.017,0.433,0.068,0.161,0.518,0.09,0.377,0.509,0.158,0.607,0.418,0.277,0.783,0.291,0.434,0.856,0.193,0.598,0.814,0.175,0.736,0.689,0.262,0.825,0.544,0.439,0.859,0.445,0.658,0.854,0.442,0.857,0.84,0.543,0.985,0.849,0.714,1,0.903,0.888,1,1,1};
-		
-		double index = v*16;
-		int lowIndex = std::min(std::floor(index), 15.0);
-		double rH = (index - lowIndex), rL = 1 - rH;
-		
-		double *rgbLow = rgb1 + 3*lowIndex;
-		for (int c = 0; c < 3; ++c) {
-			rgba[c] = std::sqrt(rgbLow[c]*rgbLow[c]*rL + rgbLow[c + 3]*rgbLow[c + 3]*rH);
-		}
-#endif
+		style.cmap(v, rgba);
 		for (int c = 0; c < 4; ++c) {
 			rgba8[c] = std::round(255*std::max(0.0, std::min(1.0, rgba[c])));
 		}
-		return;
 	}
 
 	// PNG file contents
 	std::vector<uint8_t> pngBytes;
-	void renderBytes(bool flippedY) {
+	void renderBytes(const PlotStyle &style, bool flippedY) {
 //		for (auto &v : unitValues) scale.autoValue(v);
 //		scale.autoSetup();
 	
@@ -291,7 +283,7 @@ private:
 		for (int i = 0; i < 256; ++i) {
 			double v = i/255.0;
 			if (light) v = 1 - v;
-			colourMap(v, rgba);
+			colourMap(style, v, rgba);
 			addBytes((char *)rgba, 3);
 			if (rgba[3] != 255) hasAlpha = true;
 		}
@@ -302,7 +294,7 @@ private:
 			for (int i = 0; i < 256; ++i) {
 				double v = i/255.0;
 				if (light) v = 1 - v;
-				colourMap(v, rgba);
+				colourMap(style, v, rgba);
 				addBytes((char *)rgba + 3, 1);
 			}
 			endChunk();

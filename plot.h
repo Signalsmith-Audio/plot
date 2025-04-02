@@ -1422,13 +1422,13 @@ public:
 		if (maxDots > 0) {
 			svg.tag("g");
 			static constexpr double outOfRange = -10000;
-			const char *neutralValue = "-10000 -10000";
+			const char *neutralValue = "-10000";
 			for (size_t d = 0; d < maxDots; ++d) {
 				double x = outOfRange, y = outOfRange, r = 5, c = 0;
 				bool hasC = false;
 
-				if (d < dots.size()) {
-					auto &dot = dots[d];
+				if (d < dots.size() || (animated && dots.size() == 0 && d < frames[0].dots.size())) {
+					auto &dot = (dots.size() > 0) ? dots[d] : frames[0].dots[d];
 					x = axisX.map(dot.x);
 					y = axisY.map(dot.y);
 					r = dot.screenR;
@@ -1436,14 +1436,14 @@ public:
 					c = 0.5 + (dot.c - 0.5)*style.dotCmapDepth;
 				}
 				if (animated || x != outOfRange || y != outOfRange) {
+					if (hasC) svg.translateCmap(style, c);
+					svg.tag("g").attr("class", "svg-plot-dot");
 					if (!animated) {
-						if (hasC) svg.translateCmap(style, c);
-						svg.tag("g").attr("class", "svg-plot-dot");
 						if (_drawFill) { // fill
 							auto circle = svg.tag("circle", true)
 								.attr("cx", x).attr("cy", y).attr("r", r)
 								.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
-							if (hasC) circle.attr("style", "fill:", svg.cmapStr);
+							if (hasC) circle.attr("fill", svg.cmapStr);
 						}
 						if (_drawLine) { // border
 							auto circle = svg.tag("circle", true)
@@ -1451,29 +1451,91 @@ public:
 								.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), " ");
 							if (hasC) circle.attr("style", "stroke:", svg.cmapStr);
 						}
-						svg.raw("</g>");
 					} else {
-//						svg.tag("circle")
-//							.attr("cx", x).attr("cy", y).attr("r", r)
-//							.attr("class", "svg-plot-dot");
-
-	//					svg.raw("<animateTransform").attr("calcMode", "discrete")
-	//						.attr("attributeName", "transform").attr("attributeType", "XML")
-	//						.attr("type", "translate");
-	//					writeAnimationAttrs(svg, [&](int index) {
-	//						double x = outOfRange, y = outOfRange;
-	//						if (m < frames[index].markers.size()) {
-	//							x = axisX.map(frames[index].markers[m].point.x);
-	//							y = axisY.map(frames[index].markers[m].point.y);
-	//							if (x < xMin || x > xMax || y < yMin || y > yMax) {
-	//								x = y = outOfRange;
-	//							}
-	//						}
-	//						svg.raw(x, " ", y);
-	//					}, neutralValue);
-	//					svg.raw("\"/></g>");
-						svg.raw("</circle>");
+						// write colour if *any* of the frames has a colour
+						bool animateC = hasC;
+						for (auto &frame : frames) {
+							if (d && frame.dots.size() && frame.dots[d].hasColour) {
+								animateC = true;
+							}
+						}
+						
+						auto writeDotAnimation = [&](bool isFill){
+							svg.raw("<animate").attr("calcMode", "discrete")
+								.attr("attributeName", "cx");
+							writeAnimationAttrs(svg, [&](int index) {
+								double x = outOfRange;
+								if (d < frames[index].dots.size()) {
+									auto &dot = frames[index].dots[d];
+									if (dot.screenR > 0) x = axisX.map(frames[index].dots[d].x);
+								}
+								svg.raw(x);
+							}, neutralValue);
+							svg.raw("\"/>");
+							svg.raw("<animate").attr("calcMode", "discrete")
+								.attr("attributeName", "cy");
+							writeAnimationAttrs(svg, [&](int index) {
+								double y = outOfRange;
+								if (d < frames[index].dots.size()) {
+									auto &dot = frames[index].dots[d];
+									if (dot.screenR > 0) y = axisY.map(dot.y);
+								}
+								svg.raw(y);
+							}, neutralValue);
+							svg.raw("\"/>");
+							svg.raw("<animate").attr("calcMode", "discrete")
+								.attr("attributeName", "r");
+							writeAnimationAttrs(svg, [&](int index) {
+								double r = 0;
+								if (d < frames[index].dots.size()) {
+									auto &dot = frames[index].dots[d];
+									if (dot.screenR > 0) r = dot.screenR;
+								}
+								svg.raw(r);
+							}, 0);
+							svg.raw("\"/>");
+							if (animateC) {
+								svg.raw("<animate").attr("calcMode", "discrete")
+									.attr("attributeName", isFill ? "fill" : "stroke");
+								const char *defaultColour = (styleIndex.colour < 0 || !style.colours.size()) ? "#000" : style.colours[styleIndex.colour%style.colours.size()].c_str();
+								writeAnimationAttrs(svg, [&](int index) {
+									const char *cstr = defaultColour;
+									if (d < frames[index].dots.size()) {
+										auto &dot = frames[index].dots[d];
+										if (dot.screenR > 0 && dot.hasColour) {
+											double c = 0.5 + (dot.c - 0.5)*style.dotCmapDepth;
+											svg.translateCmap(style, c);
+											cstr = svg.cmapStr;
+										}
+									}
+									svg.raw(cstr);
+								}, defaultColour);
+								svg.raw("\"/>");
+							}
+						};
+					
+						if (_drawFill) { // fill
+							{
+								auto circle = svg.tag("circle")
+									.attr("cx", x).attr("cy", y).attr("r", r)
+									.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
+								if (hasC) circle.attr("style", "fill:", svg.cmapStr);
+							}
+							writeDotAnimation(true);
+							svg.raw("</circle>");
+						}
+						if (_drawLine) { // border
+							{
+								auto circle = svg.tag("circle")
+									.attr("cx", x).attr("cy", y).attr("r", r)
+									.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), " ");
+								if (hasC) circle.attr("style", "stroke:", svg.cmapStr);
+							}
+							writeDotAnimation(false);
+							svg.raw("</circle>");
+						}
 					}
+					svg.raw("</g>");
 				}
 			}
 			svg.raw("</g>");

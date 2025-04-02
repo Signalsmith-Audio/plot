@@ -354,6 +354,39 @@ int main() {
 
 		figure.write("scatter-plot.svg");
 	}
+
+	{ // Animated scatter plot
+		signalsmith::plot::Figure figure;
+		auto &plot = figure(1, 0).plot(150, 150);
+		plot.x.linear(-1, 1).major(0, "");
+		plot.y.copyFrom(plot.x);
+		
+		auto &scatter = plot.lineFill();
+		
+		for (double t = 0; t < 1; t += 0.01) {
+			double phase = t*2*M_PI;
+
+			std::mt19937 randomEngine;
+			std::uniform_real_distribution<double> valueDist(-1, 1);
+			std::uniform_real_distribution<double> phaseDist(0, 2*M_PI);
+
+			size_t count = std::round(5 + 4*std::cos(phase));
+			for (size_t i = 0; i < count; ++i) {
+				double x = 0.9*std::sin(phaseDist(randomEngine) + phase);
+				double y = 0.9*std::sin(phaseDist(randomEngine) + phase);
+				double screenR = 7 + 5*std::cos(phaseDist(randomEngine) + phase);
+				double c = 0.5 + 0.5*std::cos(phaseDist(randomEngine) + phase);
+				
+				scatter.dot(x, y, screenR, c);
+			}
+			
+			figure.toFrame(t*3);
+		}
+		
+		figure.loopFrame(3);
+
+		figure.write("scatter-plot-animation.svg");
+	}
 }
 
 signalsmith::plot::PlotStyle customStyle() {

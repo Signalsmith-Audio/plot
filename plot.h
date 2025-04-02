@@ -22,7 +22,7 @@ namespace signalsmith { namespace plot {
 	Elements are drawn hierarchically, but generally in reverse order, so you should add your most important elements first.
 
 	Elements can have a "style index" which simultaneously loops through colour/dash/hatch sequences, for increased greyscale/colourblind support.
- 		\image html style-sequence.svg
+	\image html style-sequence.svg
 
 	@{
 	@file
@@ -33,6 +33,7 @@ static double estimateUtf8Width(const char *utf8Str);
 /** Plotting style, used for both layout and SVG rendering.
 	Colour/dash/hatch styles are defined as CSS classes, assigned to elements based on their integer style index.  CSS is written inline in the SVG, and can be extended/overridden with `.cssPrefix`/`.cssSuffix`.
  		\image html custom-2d.svg
+	
 	It generates CSS classes from `.colours` (`svg-plot-sN`/`svg-plot-fN`/`svg-plot-tN` for stroke/fill/text), `.dashes` (`svg-plot-dN`) and `.hatches` (`svg-plot-hN`), where `N` is the index - e.g. there are six colours by default, generating `svg-plot-s0` to `svg-plot-s5`.
 */
 class PlotStyle {
@@ -309,7 +310,7 @@ struct Point2D {
 	double x, y;
 };
 
-/// Wrapper for slightly more semantic code when writing SVGs
+/// Internal helper class for slightly more semantic code when writing SVGs
 class SvgWriter {
 	std::ostream &output;
 	std::vector<Bounds> clipStack;
@@ -515,7 +516,7 @@ public:
 
 /** Any drawable element.
  	
-	Each element can draw to three layers: fill, stroke and label.  Child elements are drawn in reverse order, so the earliest ones are drawn on top of each layer.
+	Each element can draw to two layers: data and label.  Child elements are drawn in reverse order, so the earliest ones are drawn on top of each layer.
 	
 	Copy/assign is disabled, to prevent accidental copying when you should be holding a reference.
 */
@@ -590,7 +591,8 @@ public:
 	virtual void toFrame(double time, bool clear=true) {
 		for (auto &c : children) c->toFrame(time, clear);
 	}
-	/// Sets loop time (or < 0 to disable)
+	/** Sets loop time (or < 0 to disable) for this element and all children.
+		Elements may have different loop time */
 	virtual void loopFrame(double loopTime) {
 		for (auto &c : children) c->loopFrame(loopTime);
 	}
@@ -1136,6 +1138,9 @@ public:
 		return *this;
 	}
 
+	/** Adds a scatter-plot style circle
+		\image html scatter-plot.svg
+	*/
 	Line2D & dot(double x, double y, double screenR) {
 		latest = {x, y};
 		dots.push_back({x, y, screenR, false, 0});
@@ -1144,6 +1149,7 @@ public:
 		return *this;
 	}
 
+	/// Adds a scatter-plot style circle, with colour value in the 0-1 range
 	Line2D & dot(double x, double y, double screenR, double unitColour) {
 		latest = {x, y};
 		dots.push_back({x, y, screenR, true, unitColour});
@@ -1152,25 +1158,7 @@ public:
 		return *this;
 	}
 
-	void toFrame(double time, bool clear=true) override {
-		SvgDrawable::toFrame(time, clear);
-		frames.push_back({time, points, markers, dots});
-		if (clear) {
-			points.clear();
-			markers.clear();
-			dots.clear();
-		}
-		framesLoopTime = std::max(time, framesLoopTime);
-	}
-	void loopFrame(double endTime) override {
-		SvgDrawable::loopFrame(endTime);
-		framesLoopTime = endTime;
-	}
-	void clearFrames() override {
-		SvgDrawable::clearFrames();
-		frames.resize(0);
-		framesLoopTime = 0;
-	}
+	/// Flag to attempt interpolation of the path between frames
 	bool smoothFrame = false;
 
 	/// @{
@@ -1279,18 +1267,22 @@ public:
 		return label(valueX, valueY, name, 0, -1);
 	}
 
-	Line2D & label(double valueX, double valueY, std::string name, double degrees, double distance=0) {
+	/// Label with direction and distance.
+	/// `direction` is 0-4 going clockwise: 0=right, 1=up, 2=left, 3=down
+	Line2D & label(double valueX, double valueY, std::string name, double direction, double distance=0) {
 		axisX.autoValue(valueX);
 		axisY.autoValue(valueY);
-		this->addChild(new LineLabel(axisX, axisY, {valueX, valueY}, name, degrees, distance, styleIndex));
+		this->addChild(new LineLabel(axisX, axisY, {valueX, valueY}, name, direction, distance, styleIndex));
 		return *this;
 	}
 
-	Line2D & label(std::string name, double degrees=0, double distance=0) {
-		return label(latest.x, latest.y, name, degrees, distance);
+	/// Adds a label using the latest point/marker/dot position
+	Line2D & label(std::string name, double direction=0, double distance=0) {
+		return label(latest.x, latest.y, name, direction, distance);
 	}
 
-	Line2D & label(double xIsh, std::string name, double degrees=0, double distance=0) {
+	/// Adds a label using the closest (line) point to the given x-axis position
+	Line2D & label(double xIsh, std::string name, double direction=0, double distance=0) {
 		size_t closest = 0;
 		double closestError = -1;
 		for (size_t i = 0; i < points.size(); ++i) {
@@ -1300,7 +1292,30 @@ public:
 			}
 		}
 		Point2D latest = points[closest];
-		return label(latest.x, latest.y, name, degrees, distance);
+		return label(latest.x, latest.y, name, direction, distance);
+	}
+	
+	/// @{
+	///@name Overridden from SvgDrawable
+
+	void toFrame(double time, bool clear=true) override {
+		SvgDrawable::toFrame(time, clear);
+		frames.push_back({time, points, markers, dots});
+		if (clear) {
+			points.clear();
+			markers.clear();
+			dots.clear();
+		}
+		framesLoopTime = std::max(time, framesLoopTime);
+	}
+	void loopFrame(double endTime) override {
+		SvgDrawable::loopFrame(endTime);
+		framesLoopTime = endTime;
+	}
+	void clearFrames() override {
+		SvgDrawable::clearFrames();
+		frames.resize(0);
+		framesLoopTime = 0;
 	}
 	
 	void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
@@ -1543,6 +1558,7 @@ public:
 
 		SvgDrawable::writeData(svg, style);
 	}
+	/// @}
 };
 
 class Legend : public SvgFileDrawable {
@@ -1881,6 +1897,8 @@ public:
 		return *legend;
 	}
 	
+	/** Embeds an image using the given data co-ordinates
+		\image html embedded-image.svg */
 	Image & image(Axis &x, Axis &y, Bounds dataBounds, const std::string &url) {
 		Image *image = new Image(x, y, dataBounds, url);
 		this->addChild(image);
@@ -1893,6 +1911,7 @@ public:
 		return image(Bounds{left, right, top, bottom}, url);
 	}
 	
+	/// Adds a title to the plot, using the same position rules as `.legend()`
 	Plot2D & title(const std::string &t, double rx=0.5, double ry=2) {
 		plotTitle = t;
 		titleRx = rx;
@@ -1920,6 +1939,8 @@ public:
 	}
 };
 
+/// Basic grid-based layout, where you can address cells using `grid(x, y)`.
+/// \image html grid.svg
 class Grid : public Cell {
 	int _colMax = 0, _colMin = 0, _rowMax = 0, _rowMin = 0;
 	struct Item {

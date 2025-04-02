@@ -81,6 +81,7 @@ See [examples.cpp](doc/examples.cpp) for code examples.  Here are the images gen
 ![Grid](doc/examples/grid.svg)
 ![Animation](doc/examples/animation.svg)
 ![Scatter](doc/examples/scatter-plot.svg)
+![Scatter animated](doc/examples/scatter-plot-animation.svg)
 
 ### API principles
 

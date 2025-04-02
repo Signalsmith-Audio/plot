@@ -1443,7 +1443,7 @@ public:
 							auto circle = svg.tag("circle", true)
 								.attr("cx", x).attr("cy", y).attr("r", r)
 								.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
-							if (hasC) circle.attr("fill", svg.cmapStr);
+							if (hasC) circle.attr("style", "fill:", svg.cmapStr);
 						}
 						if (_drawLine) { // border
 							auto circle = svg.tag("circle", true)

@@ -248,6 +248,11 @@ public:
 			}
 		}
 	}
+	
+	// Make sure you have a copy, not a reference
+	PlotStyle copy() {
+		return *this;
+	}
 };
 
 struct Bounds {
@@ -653,10 +658,6 @@ public:
 	
 	/// Draws when this object goes out of scope
 	struct ScheduledWrite {
-		SvgFileDrawable &drawable;
-		PlotStyle style;
-		std::string svgFile;
-		
 		ScheduledWrite(SvgFileDrawable &drawable, const PlotStyle &style, const std::string &svgFile) : drawable(drawable), style(style), svgFile(svgFile) {}
 		ScheduledWrite(const ScheduledWrite &other) = delete;
 		ScheduledWrite(ScheduledWrite &&other) : drawable(other.drawable), style(other.style), svgFile(other.svgFile) {
@@ -665,6 +666,10 @@ public:
 		~ScheduledWrite() {
 			if (svgFile.size() > 0) drawable.write(svgFile, style);
 		}
+	private:
+		SvgFileDrawable &drawable;
+		const PlotStyle &style;
+		std::string svgFile;
 	};
 	ScheduledWrite writeLater(const std::string &svgFile) {
 		return ScheduledWrite{*this, PlotStyle::defaultStyle(), svgFile};
@@ -1816,6 +1821,19 @@ public:
 	PlotStyle style;
 	
 	Figure() : style(PlotStyle::defaultStyle()) {}
+
+	using Grid::write;
+
+	void write(std::ostream &o) {
+		this->write(o, style);
+	}
+	void write(const std::string &svgFile) {
+		write(svgFile, style);
+	}
+
+	ScheduledWrite writeLater(const std::string &svgFile) {
+		return ScheduledWrite{*this, style, svgFile};
+	}
 };
 
 static double estimateCharWidth(int c) {

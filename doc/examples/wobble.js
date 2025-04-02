@@ -1,7 +1,7 @@
 (function(document, setTimeout, random) {
-	var wobble = 2, wobbleInterval = 40, wobbleMs = 240, wobbleSync = true;
-	var style = document.querySelector('style');
-	style.textContent = "@import \"/style/article/dist.css\";" + style.textContent + ".svg-plot-value,.svg-plot-label{font-family:\"Geraint Dense\",Arial,sans-serif}";
+	var wobble = 2, wobbleInterval = 40, wobbleMs = 240, wobbleSync = false;
+	var style = Array.from(document.querySelectorAll('style')).pop(); // get the last one
+	style.textContent += " .svg-plot-value,.svg-plot-label{font-family:\"Geraint Dense\",\"Comic Sans MS\",Arial,sans-serif}";
 	var updateFns = [];
 	document.querySelectorAll("path").forEach(function (path) {
 		function rand() {
@@ -14,8 +14,8 @@
 			var first = true;
 			var fromX = rand(), toX = rand(), fromY = rand(), toY = rand();
 			var prevX, prevY;
-			var newD = d.replace(/([0-9\.]+) ([0-9\.]+)/g, function(p, x, y) {
-				result = "";
+			var newD = d.replace(/(-?[0-9\.]+) (-?[0-9\.]+)/g, function(p, x, y) {
+				let result = "";
 				function addPoint(x, y) {
 					x = parseFloat(x);
 					y = parseFloat(y);

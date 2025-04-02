@@ -43,7 +43,7 @@ int main() {
 		}
 		
 		// Remove bottom ticks
-		auto style = plot.defaultStyle();
+		auto style = signalsmith::plot::PlotStyle::defaultStyle().copy();
 		style.tickV = 0;
 		plot.write("style-sequence.svg", style);
 	}
@@ -70,6 +70,32 @@ int main() {
 		figure.write("custom-2d.svg");
 	}
 
+	{
+		auto prevDefault = signalsmith::plot::PlotStyle::defaultStyle().copy();
+		// Change the default style
+		signalsmith::plot::PlotStyle::defaultStyle() = customStyle();
+		
+		signalsmith::plot::Figure figure;
+		auto &plot = figure.plot();
+
+		// Customise the axes
+		plot.x.major(0).tick(10).label("time");
+		plot.y.major(0).minors(-1, 1).label("signal");
+
+		// Add some data with `.add(x, y)`
+		auto &sin = plot.line().fillToY(0), &cos = plot.line().fillToY(0);
+		for (double x = 0; x < 10; x += 0.01) {
+			sin.add(x, std::sin(x));
+			cos.add(x, std::cos(x));
+		}
+		sin.label("sin(x)");
+		cos.label("cos(x)");
+
+		figure.write("custom-default-2d.svg");
+		
+		// Put the default back
+		signalsmith::plot::PlotStyle::defaultStyle() = prevDefault;
+	}
 	{ // Filled circles
 		signalsmith::plot::Plot2D plot(200, 200);
 		// No ticks or grid
@@ -154,7 +180,7 @@ int main() {
 		plot.y.major(0).ticks(-1, 1);
 		plot.x.major(0, "min").minor(10, "max").label("time");
 		
-		auto style = plot.defaultStyle();
+		auto style = signalsmith::plot::PlotStyle::defaultStyle().copy();
 		style.fillOpacity = 0.6;
 		style.cssSuffix = ".svg-plot-legend{fill: none}";
 		plot.write("legend.svg", style);
@@ -328,8 +354,6 @@ signalsmith::plot::PlotStyle customStyle() {
 	)CSS";
 	// Minified version of `examples/wiggle.js`
 	// This JS won't run inside an <img> tag - view the image itself, or embed it as <object>.
-	style.scriptSrc = R"JS(var q=document,x=setTimeout,a=Math.random,r=q.querySelector("style");r.textContent='@import "/style/article/dist.css";'+r.textContent+'.svg-plot-value,.svg-plot-label{font-family:"Geraint Dense",Arial,sans-serif}';var t=[];q.querySelectorAll("path").forEach(function(e){var y=e.getAttribute("d");t.push(function(){var f=40*a(),u=!0,g=2*(a()-.5),h=2*(a()-.5),k=2*(a()-.5),l=2*(a()-.5),m,n,B=y.replace(/([0-9\.]+) ([0-9\.]+)/g,function(C,z,A){function p(b,c){b=parseFloat(b);c=parseFloat(c);if(!u){var d=b-m,v=c-n;d=Math.sqrt(d*
-d+v*v);if(20<d)return p(.5*(m+b),.5*(n+c)),p(b,c);f+=d;40<f&&(f=0,g=h,k=l,h=2*(a()-.5),l=2*(a()-.5))}u=!1;m=b;n=c;d=f/40;b+=g+(h-g)*d;c+=k+(l-k)*d;result+=" "+b+" "+c}result="";p(z,A);return result});e.setAttribute("d",B)})});var w=function(){t.forEach(function(e){e()});x(w,240*(.9+.2*a()))};w()
-)JS";
+	style.scriptSrc = R"JS(!function(t,a,o){Array.from(t.querySelectorAll("style")).pop().textContent+=' .svg-plot-value,.svg-plot-label{font-family:"Geraint Dense","Comic Sans MS",Arial,sans-serif}';t.querySelectorAll("path").forEach(function(e){function v(){return 2*(o()-.5)}var r=e.getAttribute("d");function n(){var l,i,u=40*o(),f=!0,s=v(),c=v(),p=v(),m=v(),t=r.replace(/(-?[0-9\.]+) (-?[0-9\.]+)/g,function(t,e,r){let o="";return function t(e,r){if(e=parseFloat(e),r=parseFloat(r),!f){var n=e-l,a=r-i;if(20<(n=Math.sqrt(n*n+a*a)))return t(.5*(l+e),.5*(i+r)),t(e,r);40<(u+=n)&&(u=0,s=c,p=m,c=v(),m=v())}f=!1,l=e,i=r;a=u/40;e+=s+(c-s)*a,r+=p+(m-p)*a,o+=" "+e+" "+r}(e,r),o});e.setAttribute("d",t),a(n,240*(.9+0*o()))}a(n,240*o())})}(document,setTimeout,Math.random);)JS";
 	return style;
 }

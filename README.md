@@ -80,6 +80,7 @@ See [examples.cpp](doc/examples.cpp) for code examples.  Here are the images gen
 ![Legend](doc/examples/legend.svg)
 ![Grid](doc/examples/grid.svg)
 ![Animation](doc/examples/animation.svg)
+![Scatter](doc/examples/scatter-plot.svg)
 
 ### API principles
 

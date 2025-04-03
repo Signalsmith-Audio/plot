@@ -97,6 +97,31 @@ int main() {
 		// Put the default back
 		signalsmith::plot::PlotStyle::defaultStyle() = prevDefault;
 	}
+
+	{ // Line with multiple sections
+		signalsmith::plot::Plot2D plot(200, 120);
+		// No ticks or grid
+		plot.x.major(0);
+		plot.y.major(0);
+		
+		auto &line = plot.line().fillToY(0);
+
+		auto addSegment = [&](double from, double to) {
+			for (double x = from; x < to; x += 0.01) {
+				line.add(x, std::cos(2*x));
+			}
+			line.cut();
+		};
+		addSegment(0, 0.4);
+		line.label(0.5, 0.55, "missing data", -25/*angle*/, 15/*distance*/);
+		addSegment(0.6, 1.4);
+		addSegment(1.55, 1.63);
+		addSegment(1.72, 2.4);
+		addSegment(2.5, 3.1);
+
+		plot.write("line-cut.svg");
+	}
+
 	{ // Filled circles
 		signalsmith::plot::Plot2D plot(200, 200);
 		// No ticks or grid

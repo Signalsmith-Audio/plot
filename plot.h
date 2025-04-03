@@ -429,7 +429,7 @@ public:
 	Point2D lastDrawn, prevPoint;
 	double totalPendingError = 0;
 	void startPath() {
-		pointState = PointState::start;
+		endPath();
 		outOfBoundsMask = 0;
 		prevPoint.x = prevPoint.y = -1e300;
 		raw("M");
@@ -438,6 +438,7 @@ public:
 		if (pointState == PointState::pendingLine) {
 			raw(" ", round(prevPoint.x), " ", round(prevPoint.y));
 		}
+		pointState = PointState::start;
 	}
 	void addPoint(double x, double y, bool alwaysInclude=false) {
 		if (std::isnan(x) || std::isnan(y)) return;
@@ -1049,7 +1050,11 @@ class Line2D : public SvgDrawable {
 	Line2D *fillToLine = nullptr;
 	
 	Axis &axisX, &axisY;
-	std::vector<Point2D> points;
+	struct LinePoint : public Point2D {
+		bool isMove;
+		LinePoint(double x, double y, bool isMove) : Point2D({x, y}), isMove(isMove) {}
+	};
+	std::vector<LinePoint> points;
 	struct Marker {
 		Point2D point;
 		int shape;
@@ -1063,13 +1068,14 @@ class Line2D : public SvgDrawable {
 	std::vector<Dot> dots;
 	struct Frame {
 		double time;
-		std::vector<Point2D> points;
+		std::vector<LinePoint> points;
 		std::vector<Marker> markers;
 		std::vector<Dot> dots;
 	};
 	double framesLoopTime = 0;
 	std::vector<Frame> frames;
 	Point2D latest{0, 0};
+	bool nextIsMove = true;
 	
 	template<class WriteValue>
 	void writeAnimationAttrs(SvgWriter &svg, WriteValue &&writeValue, const char *blankValue) {
@@ -1114,7 +1120,8 @@ public:
 	
 	Line2D & add(double x, double y) {
 		latest = {x, y};
-		points.push_back({x, y});
+		points.push_back({x, y, nextIsMove});
+		nextIsMove = false;
 		axisX.autoValue(x);
 		axisY.autoValue(y);
 		return *this;
@@ -1129,7 +1136,17 @@ public:
 	Line2D & addArray(X &&x, Y &&y) {
 		return addArray(std::forward<X>(x), std::forward<Y>(y), std::min<size_t>(x.size(), y.size()));
 	}
+
+	Line2D & cut() {
+		nextIsMove = true;
+		return *this;
+	}
 	
+	// Returns
+	Point2D prev() const {
+		return latest;
+	}
+
 	Line2D & marker(double x, double y, int shape=-1) {
 		latest = {x, y};
 		markers.push_back({{x, y}, shape});
@@ -1200,8 +1217,7 @@ public:
 		Axis &axisX, &axisY;
 		Point2D at;
 		std::string name;
-		// direction: 0=right, 1=up, 2=left, 3=down
-		double direction, distance;
+		double degrees, distance;
 		Point2D drawLineFrom{0, 0}, drawLineTo{0, 0};
 		PlotStyle::Counter &styleIndex;
 	protected:
@@ -1211,7 +1227,7 @@ public:
 				this->alignment = 0;
 				this->drawAt = {sx, sy};
 			} else {
-				double angle = direction*3.14159265358979/180;
+				double angle = degrees*3.14159265358979/180;
 				double ax = std::cos(angle), ay = std::sin(angle);
 
 				double px = sx + distance*ax, py = sy + distance*ay;
@@ -1252,7 +1268,7 @@ public:
 			TextLabel::layout(style);
 		}
 	public:
-		LineLabel(Axis &axisX, Axis &axisY, Point2D at, std::string name, double direction, double distance, PlotStyle::Counter &styleIndex) : TextLabel({0, 0}, 0, name), axisX(axisX), axisY(axisY), at(at), name(name), direction(direction), distance(distance), styleIndex(styleIndex) {}
+		LineLabel(Axis &axisX, Axis &axisY, Point2D at, std::string name, double degrees, double distance, PlotStyle::Counter &styleIndex) : TextLabel({0, 0}, 0, name), axisX(axisX), axisY(axisY), at(at), name(name), degrees(degrees), distance(distance), styleIndex(styleIndex) {}
 		
 		void writeLabel(SvgWriter &svg, const PlotStyle &style) override {
 			if (drawLineTo.x != drawLineFrom.x || drawLineTo.y != drawLineFrom.y) {
@@ -1267,22 +1283,21 @@ public:
 		return label(valueX, valueY, name, 0, -1);
 	}
 
-	/// Label with direction and distance.
-	/// `direction` is 0-4 going clockwise: 0=right, 1=up, 2=left, 3=down
-	Line2D & label(double valueX, double valueY, std::string name, double direction, double distance=0) {
+	/// Label with direction (degrees clockwise) and distance.
+	Line2D & label(double valueX, double valueY, std::string name, double degrees, double distance=0) {
 		axisX.autoValue(valueX);
 		axisY.autoValue(valueY);
-		this->addChild(new LineLabel(axisX, axisY, {valueX, valueY}, name, direction, distance, styleIndex));
+		this->addChild(new LineLabel(axisX, axisY, {valueX, valueY}, name, degrees, distance, styleIndex));
 		return *this;
 	}
 
 	/// Adds a label using the latest point/marker/dot position
-	Line2D & label(std::string name, double direction=0, double distance=0) {
-		return label(latest.x, latest.y, name, direction, distance);
+	Line2D & label(std::string name, double degrees=0, double distance=0) {
+		return label(latest.x, latest.y, name, degrees, distance);
 	}
 
 	/// Adds a label using the closest (line) point to the given x-axis position
-	Line2D & label(double xIsh, std::string name, double direction=0, double distance=0) {
+	Line2D & label(double xIsh, std::string name, double degrees=0, double distance=0) {
 		size_t closest = 0;
 		double closestError = -1;
 		for (size_t i = 0; i < points.size(); ++i) {
@@ -1292,7 +1307,7 @@ public:
 			}
 		}
 		Point2D latest = points[closest];
-		return label(latest.x, latest.y, name, direction, distance);
+		return label(latest.x, latest.y, name, degrees, distance);
 	}
 	
 	/// @{
@@ -1305,6 +1320,8 @@ public:
 			points.clear();
 			markers.clear();
 			dots.clear();
+			latest = {0, 0};
+			nextIsMove = true;
 		}
 		framesLoopTime = std::max(time, framesLoopTime);
 	}
@@ -1376,28 +1393,48 @@ public:
 	}
 	
 	void writeData(SvgWriter &svg, const PlotStyle &style) override {
-		auto writePoints = [&](std::vector<Point2D> &points, bool fill) {
+		auto writePoints = [&](std::vector<LinePoint> &points, bool fill) {
 			if (!points.size()) {
 				svg.raw("M0 0");
 				return;
 			}
-			svg.startPath();
-			for (auto &p : points) {
-				svg.addPoint(axisX.map(p.x), axisY.map(p.y), smoothFrame);
-			}
-			if (fill) {
-				if (fillToLine) {
-					auto &otherPoints = fillToLine->points;
-					for (int i = int(otherPoints.size()) - 1; i >= 0; --i) {
-						auto &p = otherPoints[i];
-						svg.addPoint(fillToLine->axisX.map(p.x), fillToLine->axisY.map(p.y), (smoothFrame || i == 0));
-					}
-				} else if (hasFillToX) {
-					svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points.back().y), true);
-					svg.addPoint(axisX.map(fillToPoint.x), axisY.map(points[0].y), true);
-				} else if (hasFillToY) {
-					svg.addPoint(axisX.map(points.back().x), axisY.map(fillToPoint.y), true);
-					svg.addPoint(axisX.map(points[0].x), axisY.map(fillToPoint.y), true);
+			if (fill && fillToLine) { // Ignore path cuts
+				svg.startPath();
+				for (auto &p : points) {
+					svg.addPoint(axisX.map(p.x), axisY.map(p.y), smoothFrame);
+				}
+				// Other line in reverse order
+				auto &otherPoints = fillToLine->points;
+				for (int i = int(otherPoints.size()) - 1; i >= 0; --i) {
+					auto &p = otherPoints[i];
+					svg.addPoint(fillToLine->axisX.map(p.x), fillToLine->axisY.map(p.y), (smoothFrame || i == 0));
+				}
+			} else if (fill && hasFillToX) {
+				for (size_t i = 0; i < points.size(); ++i) {
+					auto &p = points[i];
+					if (p.isMove) svg.startPath();
+					if (p.isMove) svg.addPoint(axisX.map(fillToPoint.x), axisY.map(p.y), true);
+					// Actual point
+					svg.addPoint(axisX.map(p.x), axisY.map(p.y), smoothFrame);
+
+					bool nextIsMove = (i + 1 == points.size() || points[i + 1].isMove);
+					if (nextIsMove) svg.addPoint(axisX.map(fillToPoint.x), axisY.map(p.y), true);
+				}
+			} else if (fill && hasFillToY) {
+				for (size_t i = 0; i < points.size(); ++i) {
+					auto &p = points[i];
+					if (p.isMove) svg.startPath();
+					if (p.isMove) svg.addPoint(axisX.map(p.x), axisY.map(fillToPoint.y), true);
+					// Actual point
+					svg.addPoint(axisX.map(p.x), axisY.map(p.y), smoothFrame);
+
+					bool nextIsMove = (i + 1 == points.size() || points[i + 1].isMove);
+					if (nextIsMove) svg.addPoint(axisX.map(p.x), axisY.map(fillToPoint.y), true);
+				}
+			} else {
+				for (auto &p : points) {
+					if (p.isMove) svg.startPath();
+					svg.addPoint(axisX.map(p.x), axisY.map(p.y), smoothFrame);
 				}
 			}
 			svg.endPath();

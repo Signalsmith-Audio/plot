@@ -53,7 +53,7 @@ public:
 	double fontAspectRatio = 1; ///< scales size estimates, if using a particularly wide font
 	double textPadding = 5, titlePadding = 15, lineHeight = 1.2;
 	// Fills
-	double fillOpacity = 0.28, dotOpacity = 0.6;
+	double fillOpacity = 0.28, dotOpacity = 0.5;
 	double hatchWidth = 1, hatchSpacing = 3;
 	double animation = 2; ///< Animation duration
 

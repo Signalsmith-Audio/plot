@@ -28,25 +28,46 @@ int main() {
 	}
 	
 	{ // Demonstrating default colour/dash/hatch/marker sequence
-		signalsmith::plot::Plot2D plot(320, 80);
+		signalsmith::plot::Figure figure;
+		auto &plot1 = figure(0, 0).plot(220, 40);
+		auto &plot2 = figure(0, 1).plot(220, 40);
+		auto &plot3 = figure(0, 2).plot(220, 40);
 		
 		// Prevent it from adding default ticks
-		plot.y.blank();
+		plot1.y.blank();
+		plot2.y.blank();
+		plot3.y.blank();
 		
 		// Add a filled triangle for each one
-		for (int i = 0; i < 10; ++i) {
-			auto &line = plot.line().fillToY(0);
+		for (int i = 0; i < 4; ++i) {
+			auto &line = plot1.line(i).fillToY(0);
 			line.add(i - 0.5, 0);
 			line.add(i + 0.5, 1);
 			line.marker(i, 0.5);
 
-			plot.x.tick(i);
+			plot1.x.tick(i);
+		}
+
+		for (int i = 4; i < 8; ++i) {
+			auto &line = plot2.line(i).fillToY(0);
+			line.add(i - 0.5, 0);
+			line.add(i + 0.5, 1);
+			line.marker(i, 0.5);
+
+			plot2.x.tick(i);
 		}
 		
-		// Remove bottom ticks
-		auto style = signalsmith::plot::PlotStyle::defaultStyle().copy();
-		style.tickV = 0;
-		plot.write("style-sequence.svg", style);
+		for (int i = 8; i < 12; ++i) {
+			auto &line = plot3.line(i).fillToY(0);
+			line.add(i - 0.5, 0);
+			line.add(i + 0.5, 1);
+			line.marker(i, 0.5);
+
+			plot3.x.tick(i);
+		}
+
+		figure.style.tickV = 0; // Remove bottom ticks
+		figure.write("style-sequence.svg");
 	}
 
 	{ // Custom style, using a figure
@@ -100,11 +121,11 @@ int main() {
 
 	{ // Line with multiple sections
 		signalsmith::plot::Plot2D plot(200, 120);
-		// No ticks or grid
 		plot.x.major(0);
 		plot.y.major(0);
 		
 		auto &line = plot.line().fillToY(0);
+		line.styleIndex.colour = 3; // just for some variety
 
 		auto addSegment = [&](double from, double to) {
 			for (double x = from; x < to; x += 0.01) {
@@ -123,7 +144,7 @@ int main() {
 	}
 
 	{ // Filled circles
-		signalsmith::plot::Plot2D plot(200, 200);
+		signalsmith::plot::Plot2D plot(150, 150);
 		// No ticks or grid
 		plot.x.blank();
 		plot.y.blank();

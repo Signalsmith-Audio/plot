@@ -1494,13 +1494,13 @@ public:
 						if (_drawFill) { // fill
 							auto circle = svg.tag("circle", true)
 								.attr("cx", x).attr("cy", y).attr("r", r)
-								.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
+								.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex), hasC ? " svg-plot-cmap" : "");
 							if (hasC) circle.attr("style", "fill:", svg.cmapStr);
 						}
 						if (_drawLine) { // border
 							auto circle = svg.tag("circle", true)
 								.attr("cx", x).attr("cy", y).attr("r", r)
-								.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), " ");
+								.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), hasC ? " svg-plot-cmap" : "");
 							if (hasC) circle.attr("style", "stroke:", svg.cmapStr);
 						}
 					} else {
@@ -1570,7 +1570,7 @@ public:
 							{
 								auto circle = svg.tag("circle")
 									.attr("cx", x).attr("cy", y).attr("r", r)
-									.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex));
+									.attr("class", "svg-plot-fill ", style.fillClass(styleIndex), " ", style.hatchClass(styleIndex), hasC ? " svg-plot-cmap" : "");
 								if (hasC) circle.attr("style", "fill:", svg.cmapStr);
 							}
 							writeDotAnimation(true);
@@ -1580,7 +1580,7 @@ public:
 							{
 								auto circle = svg.tag("circle")
 									.attr("cx", x).attr("cy", y).attr("r", r)
-									.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), " ");
+									.attr("class", "svg-plot-line ", style.strokeClass(styleIndex), hasC ? " svg-plot-cmap" : "");
 								if (hasC) circle.attr("style", "stroke:", svg.cmapStr);
 							}
 							writeDotAnimation(false);

@@ -146,6 +146,7 @@ struct HeatMap {
 			double drawBottom = fullBounds ? y.drawMax() : y.map(dataBounds.bottom);
 
 			svg.tag("image", true).attr("width", 1).attr("height", 1)
+				.attr("class", "svg-plot-cmap")
 				.attr("transform", "translate(", drawLeft, ",", drawTop, ")scale(", drawRight - drawLeft, ",", drawBottom - drawTop, ")")
 				.attr("preserveAspectRatio", "none").attr("href", heatMap.dataUrl(style, flippedY));
 		}

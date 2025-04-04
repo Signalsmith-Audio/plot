@@ -736,8 +736,10 @@ struct Tick {
 	Tick(double value, std::string name) : value(value), name(name) {}
 
 	template<typename T>
-	Tick(T v) : value(double(v)) {
-		name = (std::stringstream() << value).str();
+	Tick(T v) : value(static_cast<double>(v)) {
+		std::stringstream ss;
+		ss << value;
+		name = ss.str();
 	}
 };
 

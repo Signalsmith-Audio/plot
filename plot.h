@@ -262,7 +262,7 @@ public:
 		double rgb1[51] = {0,0,0,0.114,0.054,0,0.279,0.067,0.017,0.433,0.068,0.161,0.518,0.09,0.377,0.509,0.158,0.607,0.418,0.277,0.783,0.291,0.434,0.856,0.193,0.598,0.814,0.175,0.736,0.689,0.262,0.825,0.544,0.439,0.859,0.445,0.658,0.854,0.442,0.857,0.84,0.543,0.985,0.849,0.714,1,0.903,0.888,1,1,1};
 		
 		double index = v*16;
-		int lowIndex = std::min(std::floor(index), 15.0);
+		int lowIndex = (int) std::min(std::floor(index), 15.0);
 		double rH = (index - lowIndex), rL = 1 - rH;
 		
 		double *rgbLow = rgb1 + 3*lowIndex;
@@ -307,7 +307,7 @@ struct Bounds {
 };
 
 struct Point2D {
-	double x, y;
+	double x = 0.0, y = 0.0;
 };
 
 /// Internal helper class for slightly more semantic code when writing SVGs
@@ -389,7 +389,7 @@ public:
 
 		Tag(SvgWriter &writer, bool selfClose=false) : writer(writer), selfClose(selfClose) {}
 		// Move-construct only
-		Tag(Tag &&other) : writer(other.writer), selfClose(other.selfClose) {
+		Tag(Tag &&other) noexcept : writer(other.writer), selfClose(other.selfClose) {
 			other.active = false;
 		}
 		~Tag() {
@@ -492,13 +492,13 @@ public:
 		prevPoint = {x, y};
 	}
 	
-	char cmapStr[10];
+	char cmapStr[10] = "";
 	void translateCmap(const PlotStyle &style, double v) {
 		double rgba[4] = {v, v, v, 1};
 		style.cmap(v, rgba);
 		uint8_t rgba8[4];
 		for (size_t c = 0; c < 4; ++c) {
-			rgba8[c] = std::round(255*std::max(0.0, std::min(1.0, rgba[c])));
+			rgba8[c] = (uint8_t) std::round(255*std::max(0.0, std::min(1.0, rgba[c])));
 		}
 
 		static constexpr const char *hexChars = "0123456789ABCDEF";
@@ -628,7 +628,7 @@ public:
 		this->writeData(svg, style);
 		this->writeLabel(svg, style);
 
-		int maxBounds = std::ceil(std::max(
+		int maxBounds = (int) std::ceil(std::max(
 			std::max(std::abs(this->bounds.left), std::abs(this->bounds.right)),
 			std::max(std::abs(this->bounds.top), std::abs(this->bounds.bottom))
 		)*std::sqrt(2));
@@ -709,7 +709,7 @@ public:
 	struct ScheduledWrite {
 		ScheduledWrite(SvgFileDrawable &drawable, const PlotStyle &style, const std::string &svgFile) : drawable(drawable), style(style), svgFile(svgFile) {}
 		ScheduledWrite(const ScheduledWrite &other) = delete;
-		ScheduledWrite(ScheduledWrite &&other) : drawable(other.drawable), style(other.style), svgFile(other.svgFile) {
+		ScheduledWrite(ScheduledWrite &&other) noexcept : drawable(other.drawable), style(other.style), svgFile(other.svgFile) {
 			other.svgFile = "";
 		};
 		~ScheduledWrite() {
@@ -1069,7 +1069,7 @@ class Line2D : public SvgDrawable {
 	};
 	std::vector<Dot> dots;
 	struct Frame {
-		double time;
+		double time = 0.0;
 		std::vector<LinePoint> points;
 		std::vector<Marker> markers;
 		std::vector<Dot> dots;
@@ -1308,7 +1308,7 @@ public:
 				closestError = std::abs(points[i].x - xIsh);
 			}
 		}
-		Point2D latest = points[closest];
+        LinePoint latest = points[closest];
 		return label(latest.x, latest.y, name, degrees, distance);
 	}
 	
@@ -1727,7 +1727,7 @@ public:
 
 class Plot2D : public SvgFileDrawable {
 	std::string plotTitle;
-	double titleRx, titleRy;
+	double titleRx = 0.0, titleRy = 0.0;
 	std::vector<std::unique_ptr<Axis>> xAxes, yAxes;
 	Bounds size;
 public:

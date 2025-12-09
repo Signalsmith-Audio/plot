@@ -308,6 +308,8 @@ struct Bounds {
 
 struct Point2D {
 	double x = 0.0, y = 0.0;
+	Point2D() {}
+	Point2D(double x, double y) : x(x), y(y) {}
 };
 
 /// Internal helper class for slightly more semantic code when writing SVGs
@@ -1073,6 +1075,8 @@ class Line2D : public SvgDrawable {
 		std::vector<LinePoint> points;
 		std::vector<Marker> markers;
 		std::vector<Dot> dots;
+		Frame() {}
+		Frame(double time, std::vector<LinePoint> points, std::vector<Marker> markers, std::vector<Dot> dots) : time(time), points(points), markers(markers), dots(dots) {}
 	};
 	double framesLoopTime = 0;
 	std::vector<Frame> frames;
@@ -1317,7 +1321,7 @@ public:
 
 	void toFrame(double time, bool clear=true) override {
 		SvgDrawable::toFrame(time, clear);
-		frames.push_back({time, points, markers, dots});
+		frames.push_back(Frame{time, points, markers, dots});
 		if (clear) {
 			points.clear();
 			markers.clear();

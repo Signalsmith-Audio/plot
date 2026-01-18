@@ -2164,9 +2164,9 @@ static double estimateUtf8Width(const char *utf8Str) {
 /// @}
 }}; // namespace
 
-// If custom style exists, include it automatically
-#if defined(__has_include) && __has_include("./style.h")
-#	include "./style.h"
+// If custom style exists (including system include directories), use it
+#if defined(__has_include) && __has_include("signalsmith-plot-style.h")
+#	include "signalsmith-plot-style.h"
 #endif
 /* The simplest way to change it is the constructor of a global object
 

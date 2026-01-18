@@ -99,6 +99,21 @@ There's an [additional module](file:///Users/geraint/Development/plot/doc/html/g
 
 This uses the `PlotStyle`'s `cmap` to generate 256 RGB(A) colour-map values, then outputs an indexed PNG.
 
+### Custom style
+
+You can customise the styles using `PlotStyle` objects.  For individual `Figure`s you can use the `.style` field, or for all plots you can alter `PlotStyle::defaultStyle()`.
+
+Additionally, if there is a `"signalsmith-plot-style.h"` in the include path, this is automatically `#include`d by `plot.h`.  You can use this to define a custom style per-project or system-wide.  Since the library is header-only, the best way to customise is the constructor of a `static` global variable:
+
+```cpp
+static struct MyCustomStyle {
+	MyCustomStyle() {
+		auto &style = signalsmith::plot::PlotStyle::defaultStyle();
+		// ... get funky
+	}
+} myCustomStyle;
+```
+
 ## Development
 
 ### Testing
